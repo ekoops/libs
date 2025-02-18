@@ -24,12 +24,13 @@ limitations under the License.
 #include <driver/ppm_ringbuffer.h>
 #include <libscap/scap_barrier.h>
 #include <libscap/scap_sleep.h>
+#include <libscap/strerror.h>
 
 /* Check buffer dimension in bytes.
  * Our 2 eBPF probes require that this number is a power of 2! Right now we force this
  * constraint to all our drivers (also the kernel module and udig) just for conformity.
  */
-int32_t check_buffer_bytes_dim(char* error, unsigned long buf_bytes_dim);
+int32_t check_buffer_bytes_dim(unsigned long buf_bytes_dim, char* error);
 
 #ifndef GET_BUF_POINTERS
 #define GET_BUF_POINTERS ringbuffer_get_buf_pointers
@@ -200,11 +201,14 @@ static inline void ringbuffer_advance_to_evt(scap_device* dev, scap_evt* event) 
  * \param pdevid [out] where the device on which the event was received
  *               gets stored
  * \param pflags [out] where the flags for the event get stored
+ * \param error [out] pointer to a buffer that will contain the error string in case the
+ *				function fails. The buffer must have size SCAP_LASTERR_SIZE
  */
 static inline int32_t ringbuffer_next(struct scap_device_set* devset,
                                       scap_evt** pevent,
                                       uint16_t* pdevid,
-                                      uint32_t* pflags) {
+                                      uint32_t* pflags,
+                                      char* error) {
 	uint32_t j;
 	uint64_t min_ts = 0xffffffffffffffffLL;
 	scap_evt* pe = NULL;
@@ -256,7 +260,7 @@ static inline int32_t ringbuffer_next(struct scap_device_set* devset,
 			/* if the event length is greater than the remaining size in our block there is
 			 * something wrong! */
 			if(pe->len > dev->m_sn_len) {
-				snprintf(devset->m_lasterr, SCAP_LASTERR_SIZE, "scap_next buffer corruption");
+				scap_errprintf(error, 0, "scap_next buffer corruption");
 				dump_ringbuffer(dev);
 
 				/* if you get the following assertion, first recompile the driver and `libscap` */

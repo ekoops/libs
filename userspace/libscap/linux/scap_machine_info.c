@@ -27,6 +27,7 @@ limitations under the License.
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+#include <libscap/strerror.h>
 
 #define SECOND_TO_NS 1000000000ULL
 
@@ -80,7 +81,7 @@ void scap_os_get_agent_info(scap_agent_info* agent_info) {
 	snprintf(agent_info->uname_r, sizeof(agent_info->uname_r), "%s", uts.release);
 }
 
-static uint64_t scap_linux_get_host_boot_time_ns(char* last_err) {
+static uint64_t scap_linux_get_host_boot_time_ns(char* error) {
 	uint64_t btime = 0;
 	char proc_stat[SCAP_MAX_PATH_SIZE];
 	char line[512];
@@ -128,27 +129,25 @@ static void scap_gethostname(char* buf, size_t size) {
 	}
 }
 
-int32_t scap_os_get_machine_info(scap_machine_info* machine_info, char* lasterr) {
+int32_t scap_os_get_machine_info(scap_machine_info* machine_info, char* error) {
 	// Check that we can read under '/proc'.
 	// A wrong usage of the env variable 'HOST_ROOT' can be detected here.
 	char filename[SCAP_MAX_PATH_SIZE] = {0};
 	if(snprintf(filename, sizeof(filename), "%s/proc/", scap_get_host_root()) < 0) {
-		if(lasterr != NULL) {
-			snprintf(lasterr,
-			         SCAP_LASTERR_SIZE,
-			         "unable to build the `/proc` path with 'snprintf'\n");
+		if(error != NULL) {
+			scap_errprintf(error, 0, "unable to build the `/proc` path with 'snprintf'\n");
 		}
 		return SCAP_FAILURE;
 	}
 
 	struct stat targetstat = {0};
 	if(stat(filename, &targetstat) != 0) {
-		if(lasterr != NULL) {
-			snprintf(lasterr,
-			         SCAP_LASTERR_SIZE,
-			         "the directory '%s' doesn't exist on the system. Check the usage of the "
-			         "'HOST_ROOT' env variable.",
-			         filename);
+		if(error != NULL) {
+			scap_errprintf(error,
+			               0,
+			               "the directory '%s' doesn't exist on the system. Check the usage of the "
+			               "'HOST_ROOT' env variable.",
+			               filename);
 		}
 		return SCAP_FAILURE;
 	}
@@ -156,7 +155,7 @@ int32_t scap_os_get_machine_info(scap_machine_info* machine_info, char* lasterr)
 	machine_info->num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	machine_info->memory_size_bytes = (uint64_t)sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE);
 	scap_gethostname(machine_info->hostname, sizeof(machine_info->hostname));
-	machine_info->boot_ts_epoch = scap_linux_get_host_boot_time_ns(lasterr);
+	machine_info->boot_ts_epoch = scap_linux_get_host_boot_time_ns(error);
 	if(machine_info->boot_ts_epoch == 0) {
 		return SCAP_FAILURE;
 	}

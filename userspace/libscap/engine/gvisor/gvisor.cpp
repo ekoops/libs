@@ -41,45 +41,44 @@ extern "C" {
 namespace {
 
 int32_t scap_gvisor_init_platform(scap_platform* platform,
-                                  char* lasterr,
                                   scap_engine_handle engine,
-                                  scap_open_args* oargs) {
+                                  scap_open_args* oargs,
+                                  char* error) {
 	auto gvisor_platform = reinterpret_cast<scap_gvisor_platform*>(platform);
 	auto params = reinterpret_cast<scap_gvisor_engine_params*>(oargs->engine_params);
 
-	gvisor_platform->m_lasterr = lasterr;
-	gvisor_platform->m_platform =
-	        std::make_unique<scap_gvisor::platform>(gvisor_platform->m_lasterr,
-	                                                params->gvisor_root_path);
+	gvisor_platform->m_platform = std::make_unique<scap_gvisor::platform>(params->gvisor_root_path);
 	return SCAP_SUCCESS;
 }
 
 int32_t get_fdinfos(void* ctx,
                     const scap_threadinfo* tinfo,
                     uint64_t* n,
-                    const scap_fdinfo** fdinfos) {
+                    const scap_fdinfo** fdinfos,
+                    char* error) {
 	auto gv = reinterpret_cast<scap_gvisor::platform*>(ctx);
 
-	return gv->get_fdinfos(tinfo, n, fdinfos);
+	return gv->get_fdinfos(tinfo, n, fdinfos, error);
 }
 
-int32_t scap_gvisor_refresh_proc_table(scap_platform* platform, scap_proclist* proclist) {
+int32_t scap_gvisor_refresh_proc_table(scap_platform* platform,
+                                       scap_proclist* proclist,
+                                       char* error) {
 	auto gvisor_platform = reinterpret_cast<scap_gvisor_platform*>(platform);
 	scap_gvisor::platform* gv = gvisor_platform->m_platform.get();
 
 	if(gv == nullptr) {
-		return scap_errprintf(gvisor_platform->m_lasterr, 0, "Platform not initialized yet");
+		return scap_errprintf(error, 0, "Platform not initialized yet");
 	}
 
 	uint64_t n;
 	const scap_threadinfo* tinfos;
-	int ret = gv->get_threadinfos(&n, &tinfos);
-
+	int ret = gv->get_threadinfos(&n, &tinfos, error);
 	if(ret != SCAP_SUCCESS) {
 		return ret;
 	}
 
-	return scap_proc_scan_vtable(gvisor_platform->m_lasterr, proclist, n, tinfos, gv, get_fdinfos);
+	return scap_proc_scan_vtable(proclist, n, tinfos, gv, get_fdinfos, error);
 }
 
 int32_t scap_gvisor_close_platform(scap_platform* platform) {
@@ -100,9 +99,9 @@ bool scap_gvisor_is_thread_alive(scap_platform* platform,
 
 int32_t gvisor_get_threadlist(scap_platform* platform,
                               ppm_proclist_info** procinfo_p,
-                              char* lasterr) {
+                              char* error) {
 	if(*procinfo_p == NULL) {
-		if(scap_alloc_proclist_info(procinfo_p, SCAP_DRIVER_PROCINFO_INITIAL_SIZE, lasterr) ==
+		if(scap_alloc_proclist_info(procinfo_p, SCAP_DRIVER_PROCINFO_INITIAL_SIZE, error) ==
 		   false) {
 			return SCAP_FAILURE;
 		}
@@ -139,62 +138,66 @@ scap_platform* scap_gvisor_alloc_platform(proc_entry_callback proc_callback,
 	return &platform->m_generic;
 }
 
-void* gvisor_alloc_handle(scap_t* main_handle, char* lasterr_ptr) {
-	return new scap_gvisor::engine(lasterr_ptr);
+static void* gvisor_alloc_handle(scap_t* main_handle) {
+	return new scap_gvisor::engine();
 }
 
-int32_t gvisor_init(scap_t* main_handle, scap_open_args* oargs) {
+int32_t gvisor_init(scap_t* main_handle, scap_open_args* oargs, char* error) {
 	auto gv = reinterpret_cast<scap_gvisor::engine*>(main_handle->m_engine.m_handle);
 	auto params = (scap_gvisor_engine_params*)oargs->engine_params;
 	return gv->init(params->gvisor_config_path,
 	                params->gvisor_root_path,
 	                params->no_events,
 	                params->gvisor_epoll_timeout,
-	                params->gvisor_platform);
+	                params->gvisor_platform,
+	                error);
 }
 
 void gvisor_free_handle(scap_engine_handle engine) {
 	delete reinterpret_cast<scap_gvisor::engine*>(engine.m_handle);
 }
 
-int32_t gvisor_start_capture(scap_engine_handle engine) {
-	return HANDLE(engine)->start_capture();
+int32_t gvisor_start_capture(scap_engine_handle engine, char* error) {
+	return HANDLE(engine)->start_capture(error);
 }
 
-int32_t gvisor_close(scap_engine_handle engine) {
-	return HANDLE(engine)->close();
+int32_t gvisor_close(scap_engine_handle engine, char* error) {
+	return HANDLE(engine)->close(error);
 }
 
-int32_t gvisor_stop_capture(scap_engine_handle engine) {
-	return HANDLE(engine)->stop_capture();
+int32_t gvisor_stop_capture(scap_engine_handle engine, char* error) {
+	return HANDLE(engine)->stop_capture(error);
 }
 
 int32_t gvisor_next(scap_engine_handle engine,
                     scap_evt** pevent,
                     uint16_t* pdevid,
-                    uint32_t* pflags) {
-	return HANDLE(engine)->next(pevent, pdevid, pflags);
+                    uint32_t* pflags,
+                    char* error) {
+	return HANDLE(engine)->next(pevent, pdevid, pflags, error);
 }
 
 int32_t gvisor_configure(scap_engine_handle engine,
                          scap_setting setting,
                          unsigned long arg1,
-                         unsigned long arg2) {
+                         unsigned long arg2,
+                         char* error) {
 	return SCAP_SUCCESS;
 }
 
-int32_t gvisor_get_stats(scap_engine_handle engine, scap_stats* stats) {
-	return HANDLE(engine)->get_stats(stats);
+int32_t gvisor_get_stats(scap_engine_handle engine, scap_stats* stats, char* error) {
+	return HANDLE(engine)->get_stats(stats, error);
 }
 
 const metrics_v2* gvisor_get_stats_v2(scap_engine_handle engine,
                                       uint32_t flags,
                                       uint32_t* nstats,
-                                      int32_t* rc) {
-	return HANDLE(engine)->get_stats_v2(flags, nstats, rc);
+                                      int32_t* rc,
+                                      char* error) {
+	return HANDLE(engine)->get_stats_v2(flags, nstats, rc, error);
 }
 
-int32_t gvisor_get_n_tracepoint_hit(scap_engine_handle engine, long* ret) {
+int32_t gvisor_get_n_tracepoint_hit(scap_engine_handle engine, long* ret, char* error) {
 	return SCAP_NOT_SUPPORTED;
 }
 

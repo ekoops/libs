@@ -17,6 +17,7 @@ limitations under the License.
 */
 
 #include <stdio.h>
+#include <strerror.h>
 
 #include <libscap/scap_platform_api.h>
 #include <libscap/scap_platform_impl.h>
@@ -32,9 +33,9 @@ scap_addrlist* scap_get_ifaddr_list(struct scap_platform* platform) {
 	return NULL;
 }
 
-void scap_refresh_iflist(struct scap_platform* platform) {
+void scap_refresh_iflist(struct scap_platform* platform, char* error) {
 	if(platform && platform->m_vtable->refresh_addr_list) {
-		platform->m_vtable->refresh_addr_list(platform);
+		platform->m_vtable->refresh_addr_list(platform, error);
 	}
 }
 
@@ -59,20 +60,21 @@ uint32_t scap_get_device_by_mount_id(struct scap_platform* platform,
 int32_t scap_proc_get(struct scap_platform* platform,
                       int64_t tid,
                       struct scap_threadinfo* tinfo,
-                      bool scan_sockets) {
+                      bool scan_sockets,
+                      char* error) {
 	if(platform && platform->m_vtable->get_proc) {
-		return platform->m_vtable->get_proc(platform, tid, tinfo, scan_sockets);
+		return platform->m_vtable->get_proc(platform, tid, tinfo, scan_sockets, error);
 	}
 
-	return SCAP_FAILURE;
+	return scap_errprintf(error, 0, "Operation not supported");
 }
 
-int32_t scap_refresh_proc_table(struct scap_platform* platform) {
+int32_t scap_refresh_proc_table(struct scap_platform* platform, char* error) {
 	if(platform && platform->m_vtable->refresh_proc_table) {
-		return platform->m_vtable->refresh_proc_table(platform, &platform->m_proclist);
+		return platform->m_vtable->refresh_proc_table(platform, &platform->m_proclist, error);
 	}
 
-	return SCAP_FAILURE;
+	return scap_errprintf(error, 0, "Operation not supported");
 }
 
 bool scap_is_thread_alive(struct scap_platform* platform,

@@ -25,8 +25,6 @@ limitations under the License.
 struct scap;
 
 struct source_plugin_engine {
-	char* m_lasterr;
-
 	// Total number of events sourced by the plugin
 	uint32_t m_nevts;
 

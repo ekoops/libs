@@ -27,7 +27,7 @@ sinsp_cgroup::sinsp_cgroup(std::string &&root, bool with_self_cg):
         m_root(std::move(root)),
         m_scap_cgroup({}) {
 	char error[SCAP_LASTERR_SIZE];
-	scap_cgroup_interface_init(&m_scap_cgroup, m_root.c_str(), error, with_self_cg);
+	scap_cgroup_interface_init(&m_scap_cgroup, m_root.c_str(), with_self_cg, error);
 }
 
 std::shared_ptr<std::string> sinsp_cgroup::lookup_cgroup_dir(const std::string &subsys,

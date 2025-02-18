@@ -18,9 +18,11 @@ limitations under the License.
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <libscap/strerror.h>
 
 struct noop_engine {
-	char* m_lasterr;
+	// placeholder is here just to avoid a 0-size struct. Remove it as the first field is added.
+	char placeholder;
 };
 
 #define HANDLE(engine) ((struct noop_engine*)(engine.m_handle))
@@ -29,26 +31,23 @@ struct noop_engine {
 #include <libscap/scap.h>
 #include <libscap/strl.h>
 
-void* noop_alloc_handle(scap_t* main_handle, char* lasterr_ptr) {
-	struct noop_engine* engine = calloc(1, sizeof(struct noop_engine));
-	if(engine) {
-		engine->m_lasterr = lasterr_ptr;
-	}
-	return engine;
+void* noop_alloc_handle(scap_t* main_handle) {
+	return calloc(1, sizeof(struct noop_engine));
 }
 
 void noop_free_handle(struct scap_engine_handle engine) {
 	free(engine.m_handle);
 }
 
-int noop_close_engine(struct scap_engine_handle engine) {
+int noop_close_engine(struct scap_engine_handle engine, char* error) {
 	return SCAP_SUCCESS;
 }
 
 int32_t noop_next(struct scap_engine_handle handle,
                   scap_evt** pevent,
                   uint16_t* pdevid,
-                  uint32_t* pflags) {
+                  uint32_t* pflags,
+                  char* error) {
 	return SCAP_EOF;
 }
 
@@ -56,41 +55,38 @@ int32_t noop_start_capture(struct scap_engine_handle engine) {
 	return SCAP_SUCCESS;
 }
 
-int32_t noop_stop_capture(struct scap_engine_handle engine) {
+int32_t noop_stop_capture(struct scap_engine_handle engine, char* error) {
 	return SCAP_SUCCESS;
-}
-
-int32_t unimplemented_op(char* err, size_t err_size) {
-	strlcpy(err, "Operation not implemented", err_size);
-	return SCAP_FAILURE;
 }
 
 int32_t noop_configure(struct scap_engine_handle engine,
                        enum scap_setting setting,
                        unsigned long arg1,
-                       unsigned long arg2) {
+                       unsigned long arg2,
+                       char* error) {
 	// the open path disables dropping mode so report success even if we
 	// don't really support it
 	if(setting == SCAP_SAMPLING_RATIO && arg2 == 0) {
 		return SCAP_SUCCESS;
 	}
-	return unimplemented_op(HANDLE(engine)->m_lasterr, SCAP_LASTERR_SIZE);
+	return scap_errprintf(error, 0, "Operation not implemented");
 }
 
-int32_t noop_get_stats(struct scap_engine_handle engine, scap_stats* stats) {
+int32_t noop_get_stats(struct scap_engine_handle engine, scap_stats* stats, char* error) {
 	return SCAP_SUCCESS;
 }
 
 const struct metrics_v2* noop_get_stats_v2(struct scap_engine_handle engine,
                                            uint32_t flags,
                                            uint32_t* nstats,
-                                           int32_t* rc) {
+                                           int32_t* rc,
+                                           char* error) {
 	*rc = SCAP_SUCCESS;
 	*nstats = 0;
 	return NULL;
 }
 
-int32_t noop_get_n_tracepoint_hit(struct scap_engine_handle engine, long* ret) {
+int32_t noop_get_n_tracepoint_hit(struct scap_engine_handle engine, long* ret, char* error) {
 	return SCAP_NOT_SUPPORTED;
 }
 

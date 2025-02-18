@@ -469,6 +469,8 @@ scap_t* scap_alloc(void);
   \brief Initialize a handle
 
   \param oargs a \ref scap_open_args structure containing the open parameters.
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
 
   \return the scap return code describing whether the function succeeded or failed.
   The error string in case the function fails is accessible via \ref scap_getlasterr
@@ -476,7 +478,10 @@ scap_t* scap_alloc(void);
   If this function fails, the only thing you can safely do with the handle is to call
   \ref scap_deinit on it.
 */
-int32_t scap_init(scap_t* handle, scap_open_args* oargs, const struct scap_vtable* vtable);
+int32_t scap_init(scap_t* handle,
+                  scap_open_args* oargs,
+                  const struct scap_vtable* vtable,
+                  char* error);
 
 /*!
   \brief Allocate and initialize a handle
@@ -535,13 +540,10 @@ void scap_close(scap_t* handle);
     from its current offset.
 
   \param handle Handle to the capture instance.
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
 */
-uint32_t scap_restart_capture(scap_t* handle);
-
-/*!
-  \brief Return a string with the last error that happened on the given capture.
-*/
-const char* scap_getlasterr(scap_t* handle);
+uint32_t scap_restart_capture(scap_t* handle, char* error);
 
 /*!
  * \brief returns the maximum amount of memory used by any driver queue
@@ -553,9 +555,13 @@ uint64_t scap_max_buf_used(scap_t* handle);
 
   \param handle Handle to the capture instance.
   \param pevent [out] User-provided event pointer that will be initialized with address of the
-  event. \param pdevid [out] User-provided event pointer that will be initialized with the ID of the
-  device where the event was captured. \param pflags [out] User-provided event pointer that will be
-  initialized with the flags of the event.
+  event.
+  \param pdevid [out] User-provided event pointer that will be initialized with the ID of the device
+  where the event was captured.
+  \param pflags [out] User-provided event pointer that will be initialized with the flags of the
+  event.
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
 
   \return SCAP_SUCCESS if the call is successful and pevent, pcpuid and pflags contain valid data.
    SCAP_TIMEOUT in case the read timeout expired and no event is available.
@@ -563,7 +569,11 @@ uint64_t scap_max_buf_used(scap_t* handle);
    On Failure, SCAP_FAILURE is returned and scap_getlasterr() can be used to obtain the cause of the
   error.
 */
-int32_t scap_next(scap_t* handle, scap_evt** pevent, uint16_t* pcpuid, uint32_t* pflags);
+int32_t scap_next(scap_t* handle,
+                  scap_evt** pevent,
+                  uint16_t* pdevid,
+                  uint32_t* pflags,
+                  char* error);
 
 /*!
   \brief Get the length of an event
@@ -616,8 +626,10 @@ uint32_t scap_event_get_dump_flags(scap_t* handle);
   or -1 if this is a live capture.
 
   \param handle Handle to the capture instance.
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
 */
-int64_t scap_get_readfile_offset(scap_t* handle);
+int64_t scap_get_readfile_offset(scap_t* handle, char* error);
 
 /*!
   \brief Return the capture statistics for the given capture handle.
@@ -625,12 +637,14 @@ int64_t scap_get_readfile_offset(scap_t* handle);
   \param handle Handle to the capture instance.
   \param stats [out] Pointer to a \ref scap_stats structure that will be filled with the
   statistics.
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
 
   \return SCAP_SECCESS if the call is successful.
    On Failure, SCAP_FAILURE is returned and scap_getlasterr() can be used to obtain
    the cause of the error.
 */
-int32_t scap_get_stats(scap_t* handle, scap_stats* stats);
+int32_t scap_get_stats(scap_t* handle, scap_stats* stats, char* error);
 
 /*!
   \brief Get engine statistics (including counters and `bpftool prog show` like stats)
@@ -639,13 +653,16 @@ int32_t scap_get_stats(scap_t* handle, scap_stats* stats);
   \param flags holding statistics category flags.
   \param nstats [out] Pointer reflecting number of statistics in returned buffer.
   \param rc [out] Pointer to return code.
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
 
   \return Pointer to a \ref metrics_v2 structure filled with the statistics.
 */
 const struct metrics_v2* scap_get_stats_v2(scap_t* handle,
                                            uint32_t flags,
                                            uint32_t* nstats,
-                                           int32_t* rc);
+                                           int32_t* rc,
+                                           char* error);
 
 /*!
   \brief Returns the set of ppm_sc whose events have EF_MODIFIES_STATE flag or whose syscall have
@@ -693,23 +710,27 @@ int scap_ppm_sc_to_native_id(ppm_sc_code sc_code);
   \brief This function can be used to temporarily interrupt event capture.
 
   \param handle Handle to the capture that will be stopped.
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
 
   \return SCAP_SUCCESS if the call is successful.
    On Failure, SCAP_FAILURE is returned and scap_getlasterr() can be used to obtain
    the cause of the error.
 */
-int32_t scap_stop_capture(scap_t* handle);
+int32_t scap_stop_capture(scap_t* handle, char* error);
 
 /*!
   \brief Start capture the events, if it was stopped with \ref scap_stop_capture.
 
   \param handle Handle to the capture that will be started.
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
 
   \return SCAP_SUCCESS if the call is successful.
    On Failure, SCAP_FAILURE is returned and scap_getlasterr() can be used to obtain
    the cause of the error.
 */
-int32_t scap_start_capture(scap_t* handle);
+int32_t scap_start_capture(scap_t* handle, char* error);
 
 /*!
   \brief Retrieve the table with the description of every event type that
@@ -764,6 +785,8 @@ const char* scap_get_ppm_sc_name(ppm_sc_code sc);
 
   \param handle Handle to the capture instance.
   \param snaplen the snaplen for this capture instance, in bytes.
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
 
   \note This function can only be called for live captures.
   \note By default, the driver captures the first 80 bytes of the buffers coming from
@@ -773,7 +796,7 @@ const char* scap_get_ppm_sc_name(ppm_sc_code sc);
   Conversely, big values should be used with care because they can easily generate huge
   capture files.
 */
-int32_t scap_set_snaplen(scap_t* handle, uint32_t snaplen);
+int32_t scap_set_snaplen(scap_t* handle, uint32_t snaplen, char* error);
 
 /*!
   \brief (Un)Set the ppm_sc bit in the syscall mask so that
@@ -783,9 +806,11 @@ int32_t scap_set_snaplen(scap_t* handle, uint32_t snaplen);
   \param handle Handle to the capture instance.
   \param ppm_sc id (example PPM_SC_EXECVE)
   \param enabled whether to enable or disable the syscall
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
   \note This function can only be called for live captures.
 */
-int32_t scap_set_ppm_sc(scap_t* handle, ppm_sc_code ppm_sc, bool enabled);
+int32_t scap_set_ppm_sc(scap_t* handle, ppm_sc_code ppm_sc, bool enabled, char* error);
 
 /*!
   \brief (Un)Set the drop failed feature of the drivers.
@@ -793,9 +818,11 @@ int32_t scap_set_ppm_sc(scap_t* handle, ppm_sc_code ppm_sc, bool enabled);
 
   \param handle Handle to the capture instance.
   \param enabled whether to enable or disable the feature
+  \param error Pointer to a buffer that will contain the error string in case the
+    function fails. The buffer must have size SCAP_LASTERR_SIZE.
   \note This function can only be called for live captures.
 */
-int32_t scap_set_dropfailed(scap_t* handle, bool enabled);
+int32_t scap_set_dropfailed(scap_t* handle, bool enabled, char* error);
 
 /*!
   \brief Get the root directory of the system. This usually changes
@@ -806,6 +833,8 @@ const char* scap_get_host_root();
 
 /*!
   \brief Check if the current engine name matches the provided engine_name
+  \param handle Handle to the capture instance.
+  \param engine_name The engine name.
 */
 bool scap_check_current_engine(scap_t* handle, const char* engine_name);
 
@@ -904,23 +933,26 @@ extern int32_t scap_readbuf(scap_t* handle, uint32_t cpuid, char** buf, uint32_t
 uint32_t scap_event_get_sentinel_begin(scap_evt* e);
 #endif
 
-int32_t scap_stop_dropping_mode(scap_t* handle);
-int32_t scap_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio);
-int32_t scap_enable_dynamic_snaplen(scap_t* handle);
-int32_t scap_disable_dynamic_snaplen(scap_t* handle);
+int32_t scap_stop_dropping_mode(scap_t* handle, char* error);
+int32_t scap_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio, char* error);
+int32_t scap_enable_dynamic_snaplen(scap_t* handle, char* error);
+int32_t scap_disable_dynamic_snaplen(scap_t* handle, char* error);
 uint64_t scap_ftell(scap_t* handle);
 void scap_fseek(scap_t* handle, uint64_t off);
 int32_t scap_fd_add(scap_threadinfo* tinfo, scap_fdinfo* fdinfo);
 
-int32_t scap_get_n_tracepoint_hit(scap_t* handle, long* ret);
-int32_t scap_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, uint16_t range_end);
+int32_t scap_get_n_tracepoint_hit(scap_t* handle, long* ret, char* error);
+int32_t scap_set_fullcapture_port_range(scap_t* handle,
+                                        uint16_t range_start,
+                                        uint16_t range_end,
+                                        char* error);
 
 /**
  * By default we have an expanded snaplen for the default statsd port. If the
  * statsd port is non-standard, communicate that port value to the kernel to
  * get the expanded snaplen for the correct port.
  */
-int32_t scap_set_statsd_port(scap_t* handle, uint16_t port);
+int32_t scap_set_statsd_port(scap_t* handle, uint16_t port, char* error);
 
 /**
  * Get API version supported by the driver

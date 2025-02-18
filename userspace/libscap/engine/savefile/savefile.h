@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <stdint.h>
 #include <stddef.h>
+#include <libscap/strerror.h>
 #include <libscap/scap_const.h>
 #include <libscap/scap_limits.h>
 #include <libscap/engine/savefile/scap_reader.h>
@@ -26,28 +27,16 @@ limitations under the License.
 
 #define READER_BUF_SIZE (1 << 16)  // UINT16_MAX + 1, ie: 65536
 
-#define CHECK_READ_SIZE_ERR(read_size, expected_size, error)                           \
-	if(read_size != expected_size) {                                                   \
-		snprintf(error,                                                                \
-		         SCAP_LASTERR_SIZE,                                                    \
-		         "expecting %d bytes, read %d at %s, line %d. Is the file truncated?", \
-		         (int)expected_size,                                                   \
-		         (int)read_size,                                                       \
-		         __FILE__,                                                             \
-		         __LINE__);                                                            \
-		return SCAP_FAILURE;                                                           \
-	}
-
-#define CHECK_READ_SIZE(read_size, expected_size)                                      \
-	if(read_size != expected_size) {                                                   \
-		snprintf(handle->m_lasterr,                                                    \
-		         SCAP_LASTERR_SIZE,                                                    \
-		         "expecting %d bytes, read %d at %s, line %d. Is the file truncated?", \
-		         (int)expected_size,                                                   \
-		         (int)read_size,                                                       \
-		         __FILE__,                                                             \
-		         __LINE__);                                                            \
-		return SCAP_FAILURE;                                                           \
+#define CHECK_READ_SIZE_ERR(read_size, expected_size, error)                          \
+	if(read_size != expected_size) {                                                  \
+		return scap_errprintf(                                                        \
+		        error,                                                                \
+		        0,                                                                    \
+		        "expecting %d bytes, read %d at %s, line %d. Is the file truncated?", \
+		        (int)expected_size,                                                   \
+		        (int)read_size,                                                       \
+		        __FILE__,                                                             \
+		        __LINE__);                                                            \
 	}
 
 #define CHECK_READ_SIZE_WITH_FREE_ERR(alloc_buffer, read_size, expected_size, error)   \
@@ -102,7 +91,6 @@ typedef struct scap_ifinfo_ipv6_nolinkspeed {
 struct scap_platform;
 
 struct savefile_engine {
-	char* m_lasterr;
 	scap_reader_t* m_reader;
 	block_header m_last_block_header;
 	bool m_use_last_block_header;

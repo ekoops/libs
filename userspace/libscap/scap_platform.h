@@ -43,15 +43,15 @@ struct scap_platform* scap_generic_alloc_platform(proc_entry_callback proc_callb
 
 // initialize the common part of the platform handle
 int32_t scap_generic_init_platform(struct scap_platform* platform,
-                                   char* lasterr,
-                                   struct scap_open_args* oargs);
+                                   struct scap_open_args* oargs,
+                                   char* error);
 
 // initialize a platform handle
 // this calls `scap_generic_init_platform` and `init_platform` from the vtable
 int32_t scap_platform_init(struct scap_platform* platform,
-                           char* lasterr,
                            struct scap_engine_handle engine,
-                           struct scap_open_args* oargs);
+                           struct scap_open_args* oargs,
+                           char* error);
 
 // close a platform
 // this calls `close_platform` from the vtable and also

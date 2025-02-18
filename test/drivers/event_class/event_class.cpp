@@ -90,8 +90,9 @@ void _assert_syscall_state(int syscall_state,
 /////////////////////////////////
 
 event_test::~event_test() {
+	char error[SCAP_LASTERR_SIZE];
 	/* Stop the capture just to be sure and clean ring buffers */
-	scap_stop_capture(s_scap_handle);
+	scap_stop_capture(s_scap_handle, error);
 	clear_ring_buffers();
 }
 
@@ -173,8 +174,9 @@ void event_test::enable_capture() {
 		}
 	}
 	/* We need to clear all the `ring-buffers` in case of some dirty state */
+	char error[SCAP_LASTERR_SIZE];
 	clear_ring_buffers();
-	scap_start_capture(s_scap_handle);
+	scap_start_capture(s_scap_handle, error);
 }
 
 void event_test::enable_sampling_logic(uint32_t sampling_ratio) {
@@ -214,12 +216,14 @@ void event_test::disable_capture() {
 }
 
 void event_test::clear_ring_buffers() {
+	char error[SCAP_LASTERR_SIZE];
 	uint16_t cpu_id = 0;
 	uint32_t flags = 0;
 	/* First timeout means that all the buffers are empty. If the capture is not
 	 * stopped it is possible that we will never receive a `SCAP_TIMEOUT`.
 	 */
-	while(scap_next(s_scap_handle, (scap_evt**)&m_event_header, &cpu_id, &flags) != SCAP_TIMEOUT) {
+	while(scap_next(s_scap_handle, (scap_evt**)&m_event_header, &cpu_id, &flags, error) !=
+	      SCAP_TIMEOUT) {
 	}
 }
 
@@ -231,7 +235,7 @@ ppm_evt_hdr* event_test::get_event_from_ringbuffer(uint16_t* cpu_id) {
 
 	/* Try 2 times just to be sure that all the buffers are empty. */
 	while(attempts <= 1) {
-		res = scap_next(s_scap_handle, (scap_evt**)&hdr, cpu_id, &flags);
+		res = scap_next(s_scap_handle, (scap_evt**)&hdr, cpu_id, &flags, error);
 		if(res == SCAP_SUCCESS && hdr != NULL) {
 			break;
 		} else if(res != SCAP_TIMEOUT && res != SCAP_SUCCESS) {

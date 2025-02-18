@@ -47,7 +47,7 @@ typedef struct _scap_agent_info scap_agent_info;
 */
 struct scap_addrlist* scap_get_ifaddr_list(struct scap_platform* platform);
 
-void scap_refresh_iflist(struct scap_platform* platform);
+void scap_refresh_iflist(struct scap_platform* platform, char* error);
 
 /*!
   \brief Return the machine user and group lists
@@ -71,9 +71,10 @@ uint32_t scap_get_device_by_mount_id(struct scap_platform* platform,
 int32_t scap_proc_get(struct scap_platform* platform,
                       int64_t tid,
                       struct scap_threadinfo* tinfo,
-                      bool scan_sockets);
+                      bool scan_sockets,
+                      char* error);
 
-int32_t scap_refresh_proc_table(struct scap_platform* platform);
+int32_t scap_refresh_proc_table(struct scap_platform* platform, char* error);
 
 // Check if the given thread exists in /proc
 bool scap_is_thread_alive(struct scap_platform* platform,

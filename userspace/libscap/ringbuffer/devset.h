@@ -64,10 +64,9 @@ struct scap_device_set {
 	scap_device* m_devs;
 	uint32_t m_ndevs;
 	uint64_t m_buffer_empty_wait_time_us;
-	char* m_lasterr;
 };
 
-int32_t devset_init(struct scap_device_set* devset, size_t num_devs, char* lasterr);
+int32_t devset_init(struct scap_device_set* devset, size_t num_devs, char* error);
 void devset_close_device(struct scap_device* dev);
 void devset_free(struct scap_device_set* devset);
 

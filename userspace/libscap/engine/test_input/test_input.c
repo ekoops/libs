@@ -18,12 +18,12 @@ limitations under the License.
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <libscap/strerror.h>
 
 struct scap;
 struct scap_test_input_data;
 
 struct test_input_engine {
-	char* m_lasterr;
 	struct scap_test_input_data* m_data;
 };
 
@@ -38,21 +38,15 @@ typedef struct test_input_engine test_input_engine;
 #include <libscap/scap_proc_util.h>
 #include <libscap/strl.h>
 
-static void* alloc_handle(scap_t* main_handle, char* lasterr_ptr) {
-	struct test_input_engine* engine = calloc(1, sizeof(struct test_input_engine));
-	if(engine == NULL) {
-		return NULL;
-	}
-
-	engine->m_lasterr = lasterr_ptr;
-
-	return engine;
+static void* alloc_handle(scap_t* main_handle) {
+	return calloc(1, sizeof(struct test_input_engine));
 }
 
 static int32_t next(struct scap_engine_handle handle,
                     scap_evt** pevent,
                     uint16_t* pdevid,
-                    uint32_t* pflags) {
+                    uint32_t* pflags,
+                    char* error) {
 	test_input_engine* engine = handle.m_handle;
 	scap_test_input_data* data = engine->m_data;
 
@@ -68,14 +62,13 @@ static int32_t next(struct scap_engine_handle handle,
 	return SCAP_SUCCESS;
 }
 
-static int32_t init(scap_t* main_handle, scap_open_args* oargs) {
+static int32_t init(scap_t* main_handle, scap_open_args* oargs, char* error) {
 	test_input_engine* engine = main_handle->m_engine.m_handle;
 	struct scap_test_input_engine_params* params = oargs->engine_params;
 	engine->m_data = params->test_input_data;
 
 	if(engine->m_data == NULL) {
-		strlcpy(engine->m_lasterr, "No test input data provided", SCAP_LASTERR_SIZE);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "No test input data provided");
 	}
 
 	return SCAP_SUCCESS;

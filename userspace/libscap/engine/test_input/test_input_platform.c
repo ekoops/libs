@@ -22,13 +22,15 @@ limitations under the License.
 #include <libscap/scap_const.h>
 #include <libscap/scap_open.h>
 #include <libscap/scap_proc_util.h>
+#include <libscap/strerror.h>
 #include <libscap/engine/test_input/test_input_public.h>
 #include <libscap/strl.h>
 
 static int32_t get_fdinfos(void* ctx,
                            const scap_threadinfo* tinfo,
                            uint64_t* n,
-                           const scap_fdinfo** fdinfos) {
+                           const scap_fdinfo** fdinfos,
+                           char* error) {
 	struct scap_test_input_platform* platform = ctx;
 	scap_test_input_data* data = platform->m_data;
 	size_t i;
@@ -41,35 +43,29 @@ static int32_t get_fdinfos(void* ctx,
 		}
 	}
 
-	snprintf(platform->m_lasterr,
-	         SCAP_LASTERR_SIZE,
-	         "Could not find thread info for tid %lu",
-	         tinfo->tid);
-	return SCAP_FAILURE;
+	return scap_errprintf(error, 0, "Could not find thread info for tid %lu", tinfo->tid);
 }
 
 int32_t scap_test_input_init_platform(struct scap_platform* platform,
-                                      char* lasterr,
                                       struct scap_engine_handle engine,
-                                      struct scap_open_args* oargs) {
+                                      struct scap_open_args* oargs,
+                                      char* error) {
 	struct scap_test_input_engine_params* params = oargs->engine_params;
 	struct scap_test_input_platform* test_input_platform =
 	        (struct scap_test_input_platform*)platform;
 
 	test_input_platform->m_data = params->test_input_data;
-	test_input_platform->m_lasterr = lasterr;
 
 	if(test_input_platform->m_data == NULL) {
-		strlcpy(lasterr, "No test input data provided", SCAP_LASTERR_SIZE);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "No test input data provided");
 	}
 
-	return scap_proc_scan_vtable(lasterr,
-	                             &platform->m_proclist,
+	return scap_proc_scan_vtable(&platform->m_proclist,
 	                             params->test_input_data->thread_count,
 	                             params->test_input_data->threads,
 	                             test_input_platform,
-	                             get_fdinfos);
+	                             get_fdinfos,
+	                             error);
 }
 
 static void scap_test_input_free_platform(struct scap_platform* platform) {

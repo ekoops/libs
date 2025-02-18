@@ -19,12 +19,12 @@ limitations under the License.
 #include <libscap/scap_proc_util.h>
 #include <libscap/scap.h>
 
-int32_t scap_proc_scan_vtable(char *error,
-                              struct scap_proclist *proclist,
+int32_t scap_proc_scan_vtable(struct scap_proclist *proclist,
                               uint64_t n_tinfos,
                               const scap_threadinfo *tinfos,
                               void *ctx,
-                              get_fdinfos_fn get_fdinfos) {
+                              get_fdinfos_fn get_fdinfos,
+                              char *error) {
 	scap_threadinfo *tinfo;
 	scap_threadinfo new_tinfo;
 	uint32_t res = SCAP_SUCCESS;
@@ -41,11 +41,11 @@ int32_t scap_proc_scan_vtable(char *error,
 		// Add the entry to the process table, or fire the notification callback
 		//
 		proclist->m_proc_callback(proclist->m_proc_callback_context,
-		                          error,
 		                          new_tinfo.tid,
 		                          &new_tinfo,
 		                          NULL,
-		                          &tinfo);
+		                          &tinfo,
+		                          error);
 
 		if(tinfo->pid != tinfo->tid) {
 			continue;
@@ -54,7 +54,7 @@ int32_t scap_proc_scan_vtable(char *error,
 		uint64_t n_fdinfos;
 		const scap_fdinfo *fdinfos;
 
-		res = (*get_fdinfos)(ctx, &tinfos[i], &n_fdinfos, &fdinfos);
+		res = (*get_fdinfos)(ctx, &tinfos[i], &n_fdinfos, &fdinfos, error);
 		if(res != SCAP_SUCCESS) {
 			continue;
 		}
@@ -63,11 +63,11 @@ int32_t scap_proc_scan_vtable(char *error,
 		for(j = 0; j < n_fdinfos; j++) {
 			scap_fdinfo fdi = fdinfos[j];
 			proclist->m_proc_callback(proclist->m_proc_callback_context,
-			                          error,
 			                          tinfo->tid,
 			                          tinfo,
 			                          &fdi,
-			                          NULL);
+			                          NULL,
+			                          error);
 		}
 	}
 

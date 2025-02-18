@@ -101,9 +101,11 @@ struct scap_savefile_vtable {
 	/**
 	 * @brief restart a capture from the current offset
 	 * @param handle the full scap_t handle
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 */
-	int32_t (*restart_capture)(struct scap* handle);
+	int32_t (*restart_capture)(struct scap* handle, char* error);
 
 	/**
 	 * @brief return the current offset in the capture file
@@ -126,20 +128,19 @@ struct scap_vtable {
 	/**
 	 * @brief allocate an engine-specific handle
 	 * @param main_handle pointer to the main scap_t handle
-	 * @param lasterr_ptr pointer to a SCAP_LASTERR_SIZE buffer
-	 *                    for error messages, can be stored
-	 *                    in the engine handle for easier access
 	 * @return pointer to the newly allocated handle or NULL
 	 */
-	void* (*alloc_handle)(scap_t* main_handle, char* lasterr_ptr);
+	void* (*alloc_handle)(scap_t* main_handle);
 
 	/**
 	 * @brief perform engine-specific initialization
 	 * @param main_handle pointer to the main scap_t handle
 	 * @param open_args a scap open request structure
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 */
-	int32_t (*init)(scap_t* main_handle, scap_open_args* open_args);
+	int32_t (*init)(scap_t* main_handle, scap_open_args* open_args, char* error);
 
 	/**
 	 * @brief get features supported by the engine
@@ -157,9 +158,11 @@ struct scap_vtable {
 	/**
 	 * @brief close the engine
 	 * @param engine wraps the pointer to the engine-specific handle
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 */
-	int32_t (*close)(struct scap_engine_handle engine);
+	int32_t (*close)(struct scap_engine_handle engine, char* error);
 
 	/**
 	 * @brief fetch the next event
@@ -168,6 +171,8 @@ struct scap_vtable {
 	 * @param pdevid [out] where the device on which the event was received
 	 *               gets stored
 	 * @param pflags [out] where the flags for the event get stored
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 *
 	 * SCAP_SUCCESS: event successfully returned and stored in *pevent
@@ -181,22 +186,27 @@ struct scap_vtable {
 	int32_t (*next)(struct scap_engine_handle engine,
 	                scap_evt** pevent,
 	                uint16_t* pdevid,
-	                uint32_t* pflags);
+	                uint32_t* pflags,
+	                char* error);
 
 	/**
 	 * @brief start a capture
 	 * @param engine
 	 * @param engine wraps the pointer to the engine-specific handle
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 */
-	int32_t (*start_capture)(struct scap_engine_handle engine);
+	int32_t (*start_capture)(struct scap_engine_handle engine, char* error);
 
 	/**
 	 * @brief stop a running capture
 	 * @param engine wraps the pointer to the engine-specific handle
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 */
-	int32_t (*stop_capture)(struct scap_engine_handle engine);
+	int32_t (*stop_capture)(struct scap_engine_handle engine, char* error);
 
 	/**
 	 * @brief change engine settings
@@ -204,40 +214,50 @@ struct scap_vtable {
 	 * @param setting the setting to change
 	 * @param arg1 setting-specific value
 	 * @param arg2 setting-specific value
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 */
 	int32_t (*configure)(struct scap_engine_handle engine,
 	                     enum scap_setting setting,
 	                     unsigned long arg1,
-	                     unsigned long arg2);
+	                     unsigned long arg2,
+	                     char* error);
 
 	/**
 	 * @brief get engine statistics
 	 * @param engine wraps the pointer to the engine-specific handle
 	 * @param stats [out] the stats struct to be filled
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 */
-	int32_t (*get_stats)(struct scap_engine_handle engine, struct scap_stats* stats);
+	int32_t (*get_stats)(struct scap_engine_handle engine, struct scap_stats* stats, char* error);
 
 	/**
 	 * @brief get engine statistics (including counters and `bpftool prog show` like stats)
 	 * @param flags holding statistics category flags
 	 * @param nstats [out] Pointer reflecting number of statistics in returned buffer
 	 * @param rc [out] Pointer to return code
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return Pointer to a \ref metrics_v2 structure filled with the statistics
 	 */
 	const struct metrics_v2* (*get_stats_v2)(struct scap_engine_handle engine,
 	                                         uint32_t flags,
 	                                         uint32_t* nstats,
-	                                         int32_t* rc);
+	                                         int32_t* rc,
+	                                         char* error);
 
 	/**
 	 * @brief get the number of tracepoint hits
 	 * @param engine wraps the pointer to the engine-specific handle
 	 * @param ret [out] the number of hits
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 */
-	int32_t (*get_n_tracepoint_hit)(struct scap_engine_handle engine, long* ret);
+	int32_t (*get_n_tracepoint_hit)(struct scap_engine_handle engine, long* ret, char* error);
 
 	/**
 	 * @brief get the number of used devices

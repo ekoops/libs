@@ -38,7 +38,6 @@ limitations under the License.
 struct bpf_engine {
 	struct scap_device_set m_dev_set;
 	size_t m_ncpus;
-	char* m_lasterr;
 
 	int m_tail_called_fds[BPF_PROGS_TAIL_CALLED_MAX];
 	int m_tail_called_cnt;

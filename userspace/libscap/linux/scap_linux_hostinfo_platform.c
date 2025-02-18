@@ -30,18 +30,18 @@ static void scap_linux_hostinfo_free_platform(struct scap_platform* platform) {
 }
 
 int32_t scap_linux_hostinfo_init_platform(struct scap_platform* platform,
-                                          char* lasterr,
                                           struct scap_engine_handle engine,
-                                          struct scap_open_args* oargs) {
+                                          struct scap_open_args* oargs,
+                                          char* error) {
 	int rc;
 
-	if(scap_os_get_machine_info(&platform->m_machine_info, lasterr) != SCAP_SUCCESS) {
+	if(scap_os_get_machine_info(&platform->m_machine_info, error) != SCAP_SUCCESS) {
 		return SCAP_FAILURE;
 	}
 
 	scap_os_get_agent_info(&platform->m_agent_info);
 
-	rc = scap_linux_create_iflist(platform);
+	rc = scap_linux_create_iflist(platform, error);
 	if(rc != SCAP_SUCCESS) {
 		scap_linux_hostinfo_free_platform(platform);
 		return rc;

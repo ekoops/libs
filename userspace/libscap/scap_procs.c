@@ -69,11 +69,11 @@ int32_t scap_fd_add(scap_threadinfo* tinfo, scap_fdinfo* fdinfo) {
 }
 
 int32_t default_proc_entry_callback(void* context,
-                                    char* error,
                                     int64_t tid,
                                     scap_threadinfo* tinfo,
                                     scap_fdinfo* fdinfo,
-                                    scap_threadinfo** new_tinfo) {
+                                    scap_threadinfo** new_tinfo,
+                                    char* error) {
 	struct scap_proclist* proclist = (struct scap_proclist*)context;
 	if(fdinfo != NULL) {
 		// add an fd
@@ -169,7 +169,7 @@ bool scap_alloc_proclist_info(struct ppm_proclist_info** proclist_p,
 	uint32_t memsize;
 
 	if(n_entries >= SCAP_DRIVER_PROCINFO_MAX_SIZE) {
-		snprintf(error, SCAP_LASTERR_SIZE, "driver process list too big");
+		scap_errprintf(error, 0, "driver process list too big");
 		return false;
 	}
 
@@ -179,7 +179,7 @@ bool scap_alloc_proclist_info(struct ppm_proclist_info** proclist_p,
 	if(procinfo == NULL) {
 		free(*proclist_p);
 		*proclist_p = NULL;
-		snprintf(error, SCAP_LASTERR_SIZE, "driver process list allocation error");
+		scap_errprintf(error, 0, "driver process list allocation error");
 		return false;
 	}
 

@@ -162,10 +162,11 @@ TEST(kmod, scap_stats_check) {
 
 	scap_stats stats;
 
-	ASSERT_EQ(scap_start_capture(h), SCAP_SUCCESS);
-	ASSERT_EQ(scap_get_stats(h, &stats), SCAP_SUCCESS);
+	char error[SCAP_LASTERR_SIZE];
+	ASSERT_EQ(scap_start_capture(h, error), SCAP_SUCCESS);
+	ASSERT_EQ(scap_get_stats(h, &stats, error), SCAP_SUCCESS);
 	ASSERT_GT(stats.n_evts, 0);
-	ASSERT_EQ(scap_stop_capture(h), SCAP_SUCCESS);
+	ASSERT_EQ(scap_stop_capture(h, error), SCAP_SUCCESS);
 	scap_close(h);
 }
 
@@ -178,16 +179,17 @@ TEST(kmod, double_scap_stats_call) {
 
 	scap_stats stats;
 
-	ASSERT_EQ(scap_start_capture(h), SCAP_SUCCESS);
+	char error[SCAP_LASTERR_SIZE];
+	ASSERT_EQ(scap_start_capture(h, error), SCAP_SUCCESS);
 
-	ASSERT_EQ(scap_get_stats(h, &stats), SCAP_SUCCESS);
+	ASSERT_EQ(scap_get_stats(h, &stats, error), SCAP_SUCCESS);
 	ASSERT_GT(stats.n_evts, 0);
 
 	/* Double call */
-	ASSERT_EQ(scap_get_stats(h, &stats), SCAP_SUCCESS);
+	ASSERT_EQ(scap_get_stats(h, &stats, error), SCAP_SUCCESS);
 	ASSERT_GT(stats.n_evts, 0);
 
-	ASSERT_EQ(scap_stop_capture(h), SCAP_SUCCESS);
+	ASSERT_EQ(scap_stop_capture(h, error), SCAP_SUCCESS);
 	scap_close(h);
 }
 
@@ -204,7 +206,8 @@ TEST(kmod, metrics_v2_check_per_CPU_stats) {
 	uint32_t flags = METRICS_V2_KERNEL_COUNTERS_PER_CPU;
 	uint32_t nstats = 0;
 	int32_t rc = 0;
-	const metrics_v2* stats_v2 = scap_get_stats_v2(h, flags, &nstats, &rc);
+	char error[SCAP_LASTERR_SIZE];
+	const metrics_v2* stats_v2 = scap_get_stats_v2(h, flags, &nstats, &rc, error);
 	ASSERT_EQ(rc, SCAP_SUCCESS);
 	ASSERT_TRUE(stats_v2);
 	ASSERT_GT(nstats, 0);
@@ -263,7 +266,8 @@ TEST(kmod, metrics_v2_check_results) {
 	uint32_t flags = METRICS_V2_KERNEL_COUNTERS | METRICS_V2_LIBBPF_STATS;
 	uint32_t nstats;
 	int32_t rc;
-	const metrics_v2* stats_v2 = scap_get_stats_v2(h, flags, &nstats, &rc);
+	char error[SCAP_LASTERR_SIZE];
+	const metrics_v2* stats_v2 = scap_get_stats_v2(h, flags, &nstats, &rc, error);
 	ASSERT_EQ(rc, SCAP_SUCCESS);
 	ASSERT_GT(nstats, 0);
 
@@ -305,13 +309,14 @@ TEST(kmod, double_metrics_v2_call) {
 	uint32_t flags = METRICS_V2_KERNEL_COUNTERS;
 	uint32_t nstats;
 	int32_t rc;
+	char error[SCAP_LASTERR_SIZE];
 
-	scap_get_stats_v2(h, flags, &nstats, &rc);
+	scap_get_stats_v2(h, flags, &nstats, &rc, error);
 	ASSERT_EQ(rc, SCAP_SUCCESS);
 	ASSERT_GT(nstats, 0);
 
 	/* Double call */
-	scap_get_stats_v2(h, flags, &nstats, &rc);
+	scap_get_stats_v2(h, flags, &nstats, &rc, error);
 	ASSERT_EQ(rc, SCAP_SUCCESS);
 	ASSERT_GT(nstats, 0);
 
@@ -328,7 +333,8 @@ TEST(kmod, metrics_v2_check_empty) {
 	uint32_t flags = 0;
 	uint32_t nstats;
 	int32_t rc;
-	ASSERT_TRUE(scap_get_stats_v2(h, flags, &nstats, &rc));
+	char error[SCAP_LASTERR_SIZE];
+	ASSERT_TRUE(scap_get_stats_v2(h, flags, &nstats, &rc, error));
 	ASSERT_EQ(nstats, 0);
 	ASSERT_EQ(rc, SCAP_SUCCESS);
 	scap_close(h);

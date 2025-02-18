@@ -28,8 +28,8 @@ extern "C" {
 /**
  * \brief Get the timestamp of boot with subsecond accuracy
  *
- * @param last_err a buffer of SCAP_LASTERR_SIZE for the error message, if any
  * @param boot_time pointer to the result (boot time in nanoseconds since the epoch)
+ * @param error a buffer of SCAP_LASTERR_SIZE for the error message, if any
  * @return SCAP_SUCCESS or an error code
  *
  * As opposed to scap_get_boot_time, this function:
@@ -37,7 +37,7 @@ extern "C" {
  * - doesn't need wide compatibility (only needs to work on systems supporting eBPF)
  * - needs as much accuracy as we can get (otherwise eBPF event timestamps will be wrong)
  */
-int32_t scap_get_precise_boot_time(char* last_err, uint64_t* boot_time);
+int32_t scap_get_precise_boot_time(uint64_t* boot_time, char* error);
 
 bool scap_get_bpf_stats_enabled();
 

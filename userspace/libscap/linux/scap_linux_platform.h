@@ -35,24 +35,28 @@ struct scap_linux_vtable {
 	 * @param engine wraps the pointer to the engine-specific handle
 	 * @param pid the pid of the process to check
 	 * @param vpid output parameter, pointer to the vpid
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 *
 	 * `vpid` is the pid as seen by the process itself, i.e. within its
 	 * PID namespace
 	 */
-	int32_t (*get_vpid)(struct scap_engine_handle engine, uint64_t pid, int64_t* vpid);
+	int32_t (*get_vpid)(struct scap_engine_handle engine, uint64_t pid, int64_t* vpid, char* error);
 
 	/**
 	 * @brief get the vtid of a process
 	 * @param engine wraps the pointer to the engine-specific handle
 	 * @param tid the tid of the process to check
 	 * @param vtid output parameter, pointer to the vtid
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 *
 	 * `vtid` is the tid as seen by the process itself, i.e. within its
 	 * PID namespace
 	 */
-	int32_t (*get_vtid)(struct scap_engine_handle engine, uint64_t tid, int64_t* vtid);
+	int32_t (*get_vtid)(struct scap_engine_handle engine, uint64_t tid, int64_t* vtid, char* error);
 
 	/**
 	 * @brief get the current process id in the init pid namespace
@@ -66,9 +70,9 @@ struct scap_linux_vtable {
 	/**
 	 * @brief get the list of all threads in the system, with their cpu usage
 	 * @param engine wraps the pointer to the engine-specific handle
-	 * @param procinfo_p pointer to pointer to the resulting list
-	 * @param lasterr pointer to a buffer of SCAP_LASTERR_SIZE bytes
-	 *                for the error message (if any)
+	 * @param procinfo_p pointer to the resulting list
+	 * @param error [out] pointer to a buffer that will contain the error string in case the
+	 *              function fails. The buffer must have size SCAP_LASTERR_SIZE
 	 * @return SCAP_SUCCESS or a failure code
 	 *
 	 * `procinfo_p` must not be NULL, but `*procinfo_p` may be; the returned
@@ -76,13 +80,12 @@ struct scap_linux_vtable {
 	 */
 	int32_t (*get_threadlist)(struct scap_engine_handle engine,
 	                          struct ppm_proclist_info** procinfo_p,
-	                          char* lasterr);
+	                          char* error);
 };
 
 struct scap_linux_platform {
 	struct scap_platform m_generic;
 
-	char* m_lasterr;
 	struct scap_mountinfo* m_dev_list;
 	uint32_t m_fd_lookup_limit;
 	bool m_minimal_scan;

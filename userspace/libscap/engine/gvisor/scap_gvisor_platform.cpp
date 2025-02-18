@@ -19,12 +19,13 @@ limitations under the License.
 #include <algorithm>
 #include <set>
 #include <string>
+#include <libscap/strerror.h>
 
 #include <libscap/engine/gvisor/gvisor.h>
 
 namespace scap_gvisor {
 
-uint32_t platform::get_threadinfos(uint64_t *n, const scap_threadinfo **tinfos) {
+uint32_t platform::get_threadinfos(uint64_t *n, const scap_threadinfo **tinfos, char *error) {
 	runsc::result sandboxes_res = runsc::list(m_root_path);
 	std::vector<std::string> &sandboxes = sandboxes_res.output;
 
@@ -52,7 +53,7 @@ uint32_t platform::get_threadinfos(uint64_t *n, const scap_threadinfo **tinfos) 
 			if(res.status != SCAP_SUCCESS) {
 				*tinfos = NULL;
 				*n = 0;
-				snprintf(m_lasterr, SCAP_LASTERR_SIZE, "%s", res.error.c_str());
+				scap_errprintf(error, 0, "%s", res.error.c_str());
 				return res.status;
 			}
 
@@ -69,7 +70,8 @@ uint32_t platform::get_threadinfos(uint64_t *n, const scap_threadinfo **tinfos) 
 
 uint32_t platform::get_fdinfos(const scap_threadinfo *tinfo,
                                uint64_t *n,
-                               const scap_fdinfo **fdinfos) {
+                               const scap_fdinfo **fdinfos,
+                               char *error) {
 	*n = m_threadinfos_fds[tinfo->tid].size();
 	if(*n != 0) {
 		*fdinfos = m_threadinfos_fds[tinfo->tid].data();

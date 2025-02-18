@@ -44,13 +44,13 @@ struct scap_platform_vtable {
 	// initialize the platform-specific structure
 	// at this point the engine is fully initialized and operational
 	int32_t (*init_platform)(struct scap_platform* platform,
-	                         char* lasterr,
 	                         struct scap_engine_handle engine,
-	                         struct scap_open_args* oargs);
+	                         struct scap_open_args* oargs,
+	                         char* error);
 
 	// refresh the interface list and place it inside
 	// platform->m_addrlist
-	int32_t (*refresh_addr_list)(struct scap_platform* platform);
+	int32_t (*refresh_addr_list)(struct scap_platform* platform, char* error);
 
 	// given a mount id, return the device major:minor
 	// XXX this is Linux-specific
@@ -61,9 +61,12 @@ struct scap_platform_vtable {
 	int32_t (*get_proc)(struct scap_platform*,
 	                    int64_t tid,
 	                    struct scap_threadinfo* tinfo,
-	                    bool scan_sockets);
+	                    bool scan_sockets,
+	                    char* error);
 
-	int32_t (*refresh_proc_table)(struct scap_platform*, struct scap_proclist* proclist);
+	int32_t (*refresh_proc_table)(struct scap_platform*,
+	                              struct scap_proclist* proclist,
+	                              char* error);
 	bool (*is_thread_alive)(struct scap_platform*, int64_t pid, int64_t tid, const char* comm);
 	int32_t (*get_global_pid)(struct scap_platform*, int64_t* pid, char* error);
 	int32_t (*get_threadlist)(struct scap_platform* platform,

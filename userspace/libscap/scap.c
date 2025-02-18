@@ -46,11 +46,14 @@ struct scap_platform* scap_linux_hostinfo_alloc_platform() {
 }
 #endif
 
-const char* scap_getlasterr(scap_t* handle) {
-	return handle ? handle->m_lasterr : "null scap handle";
+static int32_t operation_not_supported(char* error) {
+	return scap_errprintf(error, 0, "operation not supported");
 }
 
-int32_t scap_init_engine(scap_t* handle, scap_open_args* oargs, const struct scap_vtable* vtable) {
+static int32_t scap_init_engine(scap_t* handle,
+                                scap_open_args* oargs,
+                                const struct scap_vtable* vtable,
+                                char* error) {
 	int32_t rc;
 
 	if(!handle) {
@@ -62,24 +65,25 @@ int32_t scap_init_engine(scap_t* handle, scap_open_args* oargs, const struct sca
 	//
 	handle->m_vtable = vtable;
 
-	handle->m_engine.m_handle = handle->m_vtable->alloc_handle(handle, handle->m_lasterr);
+	handle->m_engine.m_handle = handle->m_vtable->alloc_handle(handle);
 	if(!handle->m_engine.m_handle) {
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "error allocating the engine structure");
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "error allocating the engine structure");
 	}
 
 	handle->m_log_fn = oargs->log_fn;
 
-	if(handle->m_vtable->init && (rc = handle->m_vtable->init(handle, oargs)) != SCAP_SUCCESS) {
+	if(handle->m_vtable->init &&
+	   (rc = handle->m_vtable->init(handle, oargs, error)) != SCAP_SUCCESS) {
 		return rc;
 	}
 
-	rc = check_api_compatibility(handle->m_vtable, handle->m_engine, handle->m_lasterr);
+	rc = check_api_compatibility(handle->m_vtable, handle->m_engine, error);
 	if(rc != SCAP_SUCCESS) {
 		return rc;
 	}
 
-	scap_stop_dropping_mode(handle);
+	scap_stop_dropping_mode(handle, error);
+	error[0] = '\0';  // ignore the error
 	return SCAP_SUCCESS;
 }
 
@@ -87,7 +91,10 @@ scap_t* scap_alloc(void) {
 	return calloc(1, sizeof(scap_t));
 }
 
-int32_t scap_init(scap_t* handle, scap_open_args* oargs, const struct scap_vtable* vtable) {
+int32_t scap_init(scap_t* handle,
+                  scap_open_args* oargs,
+                  const struct scap_vtable* vtable,
+                  char* error) {
 	int32_t rc;
 
 	if(!handle) {
@@ -105,7 +112,7 @@ int32_t scap_init(scap_t* handle, scap_open_args* oargs, const struct scap_vtabl
 	// The kmod hooks in the scap_linux_vtable need an initialized engine, since they call
 	// ioctls on the driver fd, so we need to initialize the engine before the platform.
 
-	rc = scap_init_engine(handle, oargs, vtable);
+	rc = scap_init_engine(handle, oargs, vtable, error);
 	if(rc != SCAP_SUCCESS) {
 		return rc;
 	}
@@ -118,13 +125,12 @@ scap_t* scap_open(scap_open_args* oargs,
                   int32_t* rc) {
 	scap_t* handle = scap_alloc();
 	if(!handle) {
-		snprintf(error, SCAP_LASTERR_SIZE, "Could not allocate memory for the scap handle");
+		scap_errprintf(error, 0, "Could not allocate memory for the scap handle");
 		return NULL;
 	}
 
-	*rc = scap_init(handle, oargs, vtable);
+	*rc = scap_init(handle, oargs, vtable, error);
 	if(*rc != SCAP_SUCCESS) {
-		strlcpy(error, handle->m_lasterr, SCAP_LASTERR_SIZE);
 		scap_close(handle);
 		return NULL;
 	}
@@ -132,23 +138,20 @@ scap_t* scap_open(scap_open_args* oargs,
 	return handle;
 }
 
-uint32_t scap_restart_capture(scap_t* handle) {
+uint32_t scap_restart_capture(scap_t* handle, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
 
 	if(handle->m_vtable->savefile_ops) {
-		return handle->m_vtable->savefile_ops->restart_capture(handle);
-	} else {
-		snprintf(handle->m_lasterr,
-		         SCAP_LASTERR_SIZE,
-		         "capture restart supported only in capture mode");
-		return SCAP_FAILURE;
+		return handle->m_vtable->savefile_ops->restart_capture(handle, error);
 	}
+	return scap_errprintf(error, 0, "capture restart supported only in capture mode");
 }
 
 void scap_deinit(scap_t* handle) {
 	if(handle->m_vtable) {
+		char error[SCAP_LASTERR_SIZE];  // the error is ignored.
 		/* The capture should be stopped before
 		 * closing the engine, here we only enforce it.
 		 * Please note that there are some corner cases in which
@@ -156,8 +159,8 @@ void scap_deinit(scap_t* handle) {
 		 * so we need to pay attention to NULL pointers in the
 		 * following v-table methods.
 		 */
-		handle->m_vtable->stop_capture(handle->m_engine);
-		handle->m_vtable->close(handle->m_engine);
+		handle->m_vtable->stop_capture(handle->m_engine, error);
+		handle->m_vtable->close(handle->m_engine, error);
 		handle->m_vtable->free_handle(handle->m_engine);
 	}
 }
@@ -205,14 +208,18 @@ uint64_t scap_max_buf_used(scap_t* handle) {
 	return 0;
 }
 
-int32_t scap_next(scap_t* handle, scap_evt** pevent, uint16_t* pdevid, uint32_t* pflags) {
+int32_t scap_next(scap_t* handle,
+                  scap_evt** pevent,
+                  uint16_t* pdevid,
+                  uint32_t* pflags,
+                  char* error) {
 	// Note: devid is like cpuid but not 1:1, e.g. consider CPU1 offline:
 	// CPU0 CPU1 CPU2 CPU3
 	// DEV0 DEV1 DEV2 DEV3 <- CPU1  online
 	// DEV0 XXXX DEV1 DEV2 <- CPU1 offline
 	int32_t res = SCAP_FAILURE;
 	if(handle && handle->m_vtable) {
-		res = handle->m_vtable->next(handle->m_engine, pevent, pdevid, pflags);
+		res = handle->m_vtable->next(handle->m_engine, pevent, pdevid, pflags, error);
 	} else {
 		res = SCAP_FAILURE;
 	}
@@ -227,7 +234,7 @@ int32_t scap_next(scap_t* handle, scap_evt** pevent, uint16_t* pdevid, uint32_t*
 //
 // Return the number of dropped events for the given handle.
 //
-int32_t scap_get_stats(scap_t* handle, scap_stats* stats) {
+int32_t scap_get_stats(scap_t* handle, scap_stats* stats, char* error) {
 	if(!handle || stats == NULL) {
 		return SCAP_FAILURE;
 	}
@@ -257,7 +264,7 @@ int32_t scap_get_stats(scap_t* handle, scap_stats* stats) {
 	stats->n_tids_suppressed = 0;
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->get_stats(handle->m_engine, stats);
+		return handle->m_vtable->get_stats(handle->m_engine, stats, error);
 	}
 
 	ASSERT(false);
@@ -270,14 +277,15 @@ int32_t scap_get_stats(scap_t* handle, scap_stats* stats) {
 const struct metrics_v2* scap_get_stats_v2(scap_t* handle,
                                            uint32_t flags,
                                            uint32_t* nstats,
-                                           int32_t* rc) {
+                                           int32_t* rc,
+                                           char* error) {
 	// If we enable per-cpu counters, we also enable kernel global counters by default.
 	if(flags & METRICS_V2_KERNEL_COUNTERS_PER_CPU) {
 		flags |= METRICS_V2_KERNEL_COUNTERS;
 	}
 
 	if(handle && handle->m_vtable) {
-		return handle->m_vtable->get_stats_v2(handle->m_engine, flags, nstats, rc);
+		return handle->m_vtable->get_stats_v2(handle->m_engine, flags, nstats, rc, error);
 	}
 	ASSERT(false);
 	*nstats = 0;
@@ -288,16 +296,16 @@ const struct metrics_v2* scap_get_stats_v2(scap_t* handle,
 //
 // Stop capturing the events
 //
-int32_t scap_stop_capture(scap_t* handle) {
+int32_t scap_stop_capture(scap_t* handle, char* error) {
 	if(handle == NULL) {
 		return SCAP_SUCCESS;
 	}
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->stop_capture(handle->m_engine);
+		return handle->m_vtable->stop_capture(handle->m_engine, error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
+	operation_not_supported(error);
 	ASSERT(false);
 	return SCAP_FAILURE;
 }
@@ -305,35 +313,35 @@ int32_t scap_stop_capture(scap_t* handle) {
 //
 // Start capturing the events
 //
-int32_t scap_start_capture(scap_t* handle) {
+int32_t scap_start_capture(scap_t* handle, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->start_capture(handle->m_engine);
+		return handle->m_vtable->start_capture(handle->m_engine, error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
+	operation_not_supported(error);
 	ASSERT(false);
 	return SCAP_FAILURE;
 }
 
-int32_t scap_stop_dropping_mode(scap_t* handle) {
+int32_t scap_stop_dropping_mode(scap_t* handle, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->configure(handle->m_engine, SCAP_SAMPLING_RATIO, 1, 0);
+		return handle->m_vtable->configure(handle->m_engine, SCAP_SAMPLING_RATIO, 1, 0, error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
+	operation_not_supported(error);
 	ASSERT(false);
 	return SCAP_FAILURE;
 }
 
-int32_t scap_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio) {
+int32_t scap_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
@@ -349,56 +357,53 @@ int32_t scap_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio) {
 	case 128:
 		break;
 	default:
-		return snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "invalid sampling ratio size");
+		return scap_errprintf(error, 0, "invalid sampling ratio size");
 	}
 
 	if(handle->m_vtable) {
 		return handle->m_vtable->configure(handle->m_engine,
 		                                   SCAP_SAMPLING_RATIO,
 		                                   sampling_ratio,
-		                                   1);
+		                                   1,
+		                                   error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
+	operation_not_supported(error);
 	ASSERT(false);
 	return SCAP_FAILURE;
 }
 
-int32_t scap_set_snaplen(scap_t* handle, uint32_t snaplen) {
+int32_t scap_set_snaplen(scap_t* handle, uint32_t snaplen, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->configure(handle->m_engine, SCAP_SNAPLEN, snaplen, 0);
+		return handle->m_vtable->configure(handle->m_engine, SCAP_SNAPLEN, snaplen, 0, error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
-	return SCAP_FAILURE;
+	return operation_not_supported(error);
 }
 
-int64_t scap_get_readfile_offset(scap_t* handle) {
+int64_t scap_get_readfile_offset(scap_t* handle, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
 
 	if(handle->m_vtable->savefile_ops) {
 		return handle->m_vtable->savefile_ops->get_readfile_offset(handle->m_engine);
-	} else {
-		snprintf(handle->m_lasterr,
-		         SCAP_LASTERR_SIZE,
-		         "scap_get_readfile_offset only works on captures");
-		return SCAP_FAILURE;
 	}
+
+	return scap_errprintf(error, 0, "scap_get_readfile_offset only works on captures");
 }
 
-int32_t scap_set_ppm_sc(scap_t* handle, ppm_sc_code ppm_sc, bool enabled) {
+int32_t scap_set_ppm_sc(scap_t* handle, ppm_sc_code ppm_sc, bool enabled, char* error) {
 	if(handle == NULL) {
 		return SCAP_FAILURE;
 	}
 
 	if(ppm_sc >= PPM_SC_MAX) {
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s(%d) wrong param", __FUNCTION__, ppm_sc);
+		scap_errprintf(error, 0, "%s(%d) wrong param", __FUNCTION__, ppm_sc);
 		ASSERT(false);
 		return SCAP_FAILURE;
 	}
@@ -406,50 +411,46 @@ int32_t scap_set_ppm_sc(scap_t* handle, ppm_sc_code ppm_sc, bool enabled) {
 	uint32_t op = enabled ? SCAP_PPM_SC_MASK_SET : SCAP_PPM_SC_MASK_UNSET;
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->configure(handle->m_engine, SCAP_PPM_SC_MASK, op, ppm_sc);
+		return handle->m_vtable->configure(handle->m_engine, SCAP_PPM_SC_MASK, op, ppm_sc, error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
-	return SCAP_FAILURE;
+	return operation_not_supported(error);
 }
 
-int32_t scap_set_dropfailed(scap_t* handle, bool enabled) {
-	if(!handle) {
-		return SCAP_FAILURE;
-	}
-
-	if(handle && handle->m_vtable) {
-		return handle->m_vtable->configure(handle->m_engine, SCAP_DROP_FAILED, enabled, 0);
-	}
-
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
-	return SCAP_FAILURE;
-}
-
-int32_t scap_enable_dynamic_snaplen(scap_t* handle) {
+int32_t scap_set_dropfailed(scap_t* handle, bool enabled, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->configure(handle->m_engine, SCAP_DYNAMIC_SNAPLEN, 1, 0);
+		return handle->m_vtable->configure(handle->m_engine, SCAP_DROP_FAILED, enabled, 0, error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
-	return SCAP_FAILURE;
+	return operation_not_supported(error);
 }
 
-int32_t scap_disable_dynamic_snaplen(scap_t* handle) {
+int32_t scap_enable_dynamic_snaplen(scap_t* handle, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->configure(handle->m_engine, SCAP_DYNAMIC_SNAPLEN, 0, 0);
+		return handle->m_vtable->configure(handle->m_engine, SCAP_DYNAMIC_SNAPLEN, 1, 0, error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
-	return SCAP_FAILURE;
+	return operation_not_supported(error);
+}
+
+int32_t scap_disable_dynamic_snaplen(scap_t* handle, char* error) {
+	if(!handle) {
+		return SCAP_FAILURE;
+	}
+
+	if(handle->m_vtable) {
+		return handle->m_vtable->configure(handle->m_engine, SCAP_DYNAMIC_SNAPLEN, 0, 0, error);
+	}
+
+	return operation_not_supported(error);
 }
 
 const char* scap_get_host_root() {
@@ -478,17 +479,16 @@ void scap_fseek(scap_t* handle, uint64_t off) {
 	}
 }
 
-int32_t scap_get_n_tracepoint_hit(scap_t* handle, long* ret) {
+int32_t scap_get_n_tracepoint_hit(scap_t* handle, long* ret, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->get_n_tracepoint_hit(handle->m_engine, ret);
+		return handle->m_vtable->get_n_tracepoint_hit(handle->m_engine, ret, error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
-	return SCAP_FAILURE;
+	return operation_not_supported(error);
 }
 
 bool scap_check_current_engine(scap_t* handle, const char* engine_name) {
@@ -498,7 +498,10 @@ bool scap_check_current_engine(scap_t* handle, const char* engine_name) {
 	return false;
 }
 
-int32_t scap_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, uint16_t range_end) {
+int32_t scap_set_fullcapture_port_range(scap_t* handle,
+                                        uint16_t range_start,
+                                        uint16_t range_end,
+                                        char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
@@ -507,24 +510,23 @@ int32_t scap_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, ui
 		return handle->m_vtable->configure(handle->m_engine,
 		                                   SCAP_FULLCAPTURE_PORT_RANGE,
 		                                   range_start,
-		                                   range_end);
+		                                   range_end,
+		                                   error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
-	return SCAP_FAILURE;
+	return operation_not_supported(error);
 }
 
-int32_t scap_set_statsd_port(scap_t* const handle, const uint16_t port) {
+int32_t scap_set_statsd_port(scap_t* const handle, const uint16_t port, char* error) {
 	if(!handle) {
 		return SCAP_FAILURE;
 	}
 
 	if(handle->m_vtable) {
-		return handle->m_vtable->configure(handle->m_engine, SCAP_STATSD_PORT, port, 0);
+		return handle->m_vtable->configure(handle->m_engine, SCAP_STATSD_PORT, port, 0, error);
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "operation not supported");
-	return SCAP_FAILURE;
+	return operation_not_supported(error);
 }
 
 uint64_t scap_get_driver_api_version(scap_t* handle) {

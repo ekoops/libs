@@ -44,8 +44,6 @@ struct scap {
 	const struct scap_vtable* m_vtable;
 	struct scap_engine_handle m_engine;
 
-	char m_lasterr[SCAP_LASTERR_SIZE];
-
 	uint64_t m_evtcnt;
 
 	// Function which may be called to log an event
@@ -68,9 +66,9 @@ void scap_free_iflist(scap_addrlist* ifhandle);
 // Free a previously allocated list of users
 void scap_free_userlist(scap_userlist* uhandle);
 
-int32_t scap_proc_fill_pidns_start_ts(char* error,
-                                      struct scap_threadinfo* tinfo,
-                                      const char* procdirname);
+int32_t scap_proc_fill_pidns_start_ts(struct scap_threadinfo* tinfo,
+                                      const char* procdirname,
+                                      char* error);
 
 bool scap_alloc_proclist_info(struct ppm_proclist_info** proclist_p,
                               uint32_t n_entries,

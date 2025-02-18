@@ -33,7 +33,7 @@ limitations under the License.
 
 /*=============================== INTERNALS ===============================*/
 
-static int __attach_raw_tp(struct bpf_attached_prog* prog, char* last_err) {
+static int __attach_raw_tp(struct bpf_attached_prog* prog, char* error) {
 	union bpf_attr attr;
 	memset(&attr, 0, sizeof(attr));
 	attr.raw_tracepoint.name = (unsigned long)prog->name;
@@ -41,15 +41,12 @@ static int __attach_raw_tp(struct bpf_attached_prog* prog, char* last_err) {
 
 	prog->efd = syscall(__NR_bpf, BPF_RAW_TRACEPOINT_OPEN, &attr, sizeof(attr));
 	if(prog->efd < 0) {
-		return scap_errprintf(last_err,
-		                      -prog->efd,
-		                      "BPF_RAW_TRACEPOINT_OPEN: event %s",
-		                      prog->name);
+		return scap_errprintf(error, -prog->efd, "BPF_RAW_TRACEPOINT_OPEN: event %s", prog->name);
 	}
 	return SCAP_SUCCESS;
 }
 
-static int __attach_tp(struct bpf_attached_prog* prog, char* last_err) {
+static int __attach_tp(struct bpf_attached_prog* prog, char* error) {
 	int efd = 0;
 	int err = 0;
 	char buf[SCAP_MAX_PATH_SIZE];
@@ -61,14 +58,14 @@ static int __attach_tp(struct bpf_attached_prog* prog, char* last_err) {
 			return SCAP_SUCCESS;
 		}
 
-		return scap_errprintf(last_err, errno, "failed to open event %s", prog->name);
+		return scap_errprintf(error, errno, "failed to open event %s", prog->name);
 	}
 
 	err = read(efd, buf, sizeof(buf));
 	if(err < 0 || err >= sizeof(buf)) {
-		int err = errno;
+		err = errno;
 		close(efd);
-		return scap_errprintf(last_err, err, "read from '%s' failed", prog->name);
+		return scap_errprintf(error, err, "read from '%s' failed", prog->name);
 	}
 	close(efd);
 
@@ -84,13 +81,13 @@ static int __attach_tp(struct bpf_attached_prog* prog, char* last_err) {
 
 	efd = syscall(__NR_perf_event_open, &attr, -1, 0, -1, 0);
 	if(efd < 0) {
-		return scap_errprintf(last_err, -efd, "event %d", id);
+		return scap_errprintf(error, -efd, "event %d", id);
 	}
 
 	if(ioctl(efd, PERF_EVENT_IOC_SET_BPF, prog->fd)) {
-		int err = errno;
+		err = errno;
 		close(efd);
-		return scap_errprintf(last_err, err, "PERF_EVENT_IOC_SET_BPF");
+		return scap_errprintf(error, err, "PERF_EVENT_IOC_SET_BPF");
 	}
 	prog->efd = efd;
 	return SCAP_SUCCESS;
@@ -181,7 +178,7 @@ void fill_attached_prog_info(struct bpf_attached_prog* prog,
 	prog->efd = -1; /* not attached */
 }
 
-int attach_bpf_prog(struct bpf_attached_prog* prog, char* last_err) {
+int attach_bpf_prog(struct bpf_attached_prog* prog, char* error) {
 	/* The program is already attached or is never found in the elf file (prog->fd == -1)
 	 * A program might be never found in the elf file for example page_faults or tracepoints
 	 * enabled only on some architectures.
@@ -193,9 +190,9 @@ int attach_bpf_prog(struct bpf_attached_prog* prog, char* last_err) {
 	int ret = 0;
 
 	if(prog->raw_tp) {
-		ret = __attach_raw_tp(prog, last_err);
+		ret = __attach_raw_tp(prog, error);
 	} else {
-		ret = __attach_tp(prog, last_err);
+		ret = __attach_tp(prog, error);
 	}
 	return ret;
 }

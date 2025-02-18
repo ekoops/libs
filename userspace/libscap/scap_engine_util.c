@@ -30,15 +30,15 @@ static inline uint64_t timespec_to_nsec(const struct timespec* ts) {
 	return ts->tv_sec * 1000000000 + ts->tv_nsec;
 }
 
-int32_t scap_get_precise_boot_time(char* last_err, uint64_t* boot_time) {
+int32_t scap_get_precise_boot_time(uint64_t* boot_time, char* error) {
 	struct timespec wall_ts, boot_ts;
 
 	if(clock_gettime(CLOCK_BOOTTIME, &boot_ts) < 0) {
-		return scap_errprintf(last_err, errno, "Failed to get CLOCK_BOOTTIME");
+		return scap_errprintf(error, errno, "Failed to get CLOCK_BOOTTIME");
 	}
 
 	if(clock_gettime(CLOCK_REALTIME, &wall_ts) < 0) {
-		return scap_errprintf(last_err, errno, "Failed to get CLOCK_REALTIME");
+		return scap_errprintf(error, errno, "Failed to get CLOCK_REALTIME");
 	}
 
 	*boot_time = timespec_to_nsec(&wall_ts) - timespec_to_nsec(&boot_ts);

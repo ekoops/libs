@@ -23,8 +23,8 @@ limitations under the License.
 #include <libscap/scap-int.h>
 
 int32_t scap_generic_init_platform(struct scap_platform* platform,
-                                   char* lasterr,
-                                   struct scap_open_args* oargs) {
+                                   struct scap_open_args* oargs,
+                                   char* error) {
 	memset(&platform->m_machine_info, 0, sizeof(platform->m_machine_info));
 	memset(&platform->m_agent_info, 0, sizeof(platform->m_agent_info));
 
@@ -81,23 +81,23 @@ struct scap_platform* scap_generic_alloc_platform(proc_entry_callback proc_callb
 }
 
 int32_t scap_platform_init(struct scap_platform* platform,
-                           char* lasterr,
                            struct scap_engine_handle engine,
-                           struct scap_open_args* oargs) {
+                           struct scap_open_args* oargs,
+                           char* error) {
 	int32_t rc;
 
 	if(!platform) {
 		return SCAP_SUCCESS;
 	}
 
-	rc = scap_generic_init_platform(platform, lasterr, oargs);
+	rc = scap_generic_init_platform(platform, oargs, error);
 	if(rc != SCAP_SUCCESS) {
 		scap_platform_close(platform);
 		return rc;
 	}
 
 	if(platform->m_vtable && platform->m_vtable->init_platform) {
-		rc = platform->m_vtable->init_platform(platform, lasterr, engine, oargs);
+		rc = platform->m_vtable->init_platform(platform, engine, oargs, error);
 		if(rc != SCAP_SUCCESS) {
 			scap_platform_close(platform);
 		}

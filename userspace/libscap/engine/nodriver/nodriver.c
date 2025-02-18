@@ -29,22 +29,19 @@ limitations under the License.
 #include <libscap/scap_gettimeofday.h>
 #include <libscap/scap_sleep.h>
 
-static void* alloc_handle(scap_t* main_handle, char* lasterr_ptr) {
-	struct nodriver_engine* engine = calloc(1, sizeof(struct nodriver_engine));
-	if(engine) {
-		engine->m_lasterr = lasterr_ptr;
-	}
-	return engine;
+static void* alloc_handle(scap_t* main_handle) {
+	return calloc(1, sizeof(struct nodriver_engine));
 }
 
-static int32_t init(scap_t* handle, scap_open_args* oargs) {
+static int32_t init(scap_t* handle, scap_open_args* oargs, char* error) {
 	return SCAP_SUCCESS;
 }
 
 static int32_t next(struct scap_engine_handle handle,
                     scap_evt** pevent,
                     uint16_t* pdevid,
-                    uint32_t* pflags) {
+                    uint32_t* pflags,
+                    char* error) {
 	static scap_evt evt;
 	evt.len = 0;
 	evt.tid = -1;

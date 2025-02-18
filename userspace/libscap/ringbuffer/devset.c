@@ -24,14 +24,14 @@ limitations under the License.
 #include <libscap/strl.h>
 #include <libscap/scap.h>
 #include <libscap/scap_assert.h>
+#include <libscap/strerror.h>
 
-int32_t devset_init(struct scap_device_set *devset, size_t num_devs, char *lasterr) {
+int32_t devset_init(struct scap_device_set *devset, size_t num_devs, char *error) {
 	devset->m_ndevs = num_devs;
 
 	devset->m_devs = (scap_device *)calloc(devset->m_ndevs, sizeof(scap_device));
 	if(!devset->m_devs) {
-		strlcpy(lasterr, "error allocating the device handles", SCAP_LASTERR_SIZE);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "error allocating the device handles");
 	}
 
 	for(size_t j = 0; j < num_devs; ++j) {
@@ -44,7 +44,6 @@ int32_t devset_init(struct scap_device_set *devset, size_t num_devs, char *laste
 		devset->m_devs[j].m_sn_len = 0;
 	}
 	devset->m_buffer_empty_wait_time_us = BUFFER_EMPTY_WAIT_TIME_US_START;
-	devset->m_lasterr = lasterr;
 
 	return SCAP_SUCCESS;
 }

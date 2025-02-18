@@ -15,9 +15,10 @@
 #define EVENTS_TO_ASSERT 32
 
 void check_event_is_not_overwritten(scap_t *h) {
+	char error[SCAP_LASTERR_SIZE];
 	/* Start the capture */
-	ASSERT_EQ(scap_start_capture(h), SCAP_SUCCESS)
-	        << "unable to start the capture: " << scap_getlasterr(h) << std::endl;
+	ASSERT_EQ(scap_start_capture(h, error), SCAP_SUCCESS)
+	        << "unable to start the capture: " << error << std::endl;
 
 	/* When the number of events is fixed for `MAX_ITERATIONS` we consider all the buffers full,
 	 * this is just an approximation */
@@ -26,8 +27,8 @@ void check_event_is_not_overwritten(scap_t *h) {
 	uint16_t iterations = 0;
 
 	while(iterations < MAX_ITERATIONS || stats.n_drops == 0) {
-		ASSERT_EQ(scap_get_stats(h, &stats), SCAP_SUCCESS)
-		        << "unable to get stats: " << scap_getlasterr(h) << std::endl;
+		ASSERT_EQ(scap_get_stats(h, &stats, error), SCAP_SUCCESS)
+		        << "unable to get stats: " << error << std::endl;
 		if(last_num_events == (stats.n_evts - stats.n_drops)) {
 			iterations++;
 		} else {
@@ -37,8 +38,8 @@ void check_event_is_not_overwritten(scap_t *h) {
 	}
 
 	/* Stop the capture */
-	ASSERT_EQ(scap_stop_capture(h), SCAP_SUCCESS)
-	        << "unable to stop the capture: " << scap_getlasterr(h) << std::endl;
+	ASSERT_EQ(scap_stop_capture(h, error), SCAP_SUCCESS)
+	        << "unable to stop the capture: " << error << std::endl;
 
 	/* The idea here is to check if an event is overwritten while we still have a pointer to it.
 	 * Again this is only an approximation, we don't know if new events will be written in the
@@ -54,10 +55,10 @@ void check_event_is_not_overwritten(scap_t *h) {
 
 	/* The first 'scap_next` could return a `SCAP_TIMEOUT` according to the chosen `buffer_mode` so
 	 * we ignore it. */
-	scap_next(h, &evt, &buffer_id, &flags);
+	scap_next(h, &evt, &buffer_id, &flags, error);
 
-	ASSERT_EQ(scap_next(h, &evt, &buffer_id, &flags), SCAP_SUCCESS)
-	        << "unable to get an event with `scap_next`: " << scap_getlasterr(h) << std::endl;
+	ASSERT_EQ(scap_next(h, &evt, &buffer_id, &flags, error), SCAP_SUCCESS)
+	        << "unable to get an event with `scap_next`: " << error << std::endl;
 
 	last_num_events = 0;
 	iterations = 0;
@@ -70,13 +71,13 @@ void check_event_is_not_overwritten(scap_t *h) {
 	uint32_t prev_nparams = evt->nparams;
 
 	/* Start again the capture */
-	ASSERT_EQ(scap_start_capture(h), SCAP_SUCCESS)
-	        << "unable to restart the capture: " << scap_getlasterr(h) << std::endl;
+	ASSERT_EQ(scap_start_capture(h, error), SCAP_SUCCESS)
+	        << "unable to restart the capture: " << error << std::endl;
 
 	/* We use the same approximation as before */
 	while(iterations < MAX_ITERATIONS) {
-		ASSERT_EQ(scap_get_stats(h, &stats), SCAP_SUCCESS)
-		        << "unable to get stats: " << scap_getlasterr(h) << std::endl;
+		ASSERT_EQ(scap_get_stats(h, &stats, error), SCAP_SUCCESS)
+		        << "unable to get stats: " << error << std::endl;
 		if(last_num_events == (stats.n_evts - stats.n_drops)) {
 			iterations++;
 		} else {
@@ -101,6 +102,7 @@ void check_event_is_not_overwritten(scap_t *h) {
         defined(__NR_socketpair)
 
 void check_event_order(scap_t *h) {
+	char error[SCAP_LASTERR_SIZE];
 	uint32_t events_to_assert[EVENTS_TO_ASSERT] = {
 	        PPME_SYSCALL_CLOSE_E,     PPME_SYSCALL_CLOSE_X,     PPME_SYSCALL_OPENAT_2_E,
 	        PPME_SYSCALL_OPENAT_2_X,  PPME_SOCKET_LISTEN_E,     PPME_SOCKET_LISTEN_X,
@@ -115,8 +117,8 @@ void check_event_order(scap_t *h) {
 	        PPME_SOCKET_SOCKETPAIR_E, PPME_SOCKET_SOCKETPAIR_X};
 
 	/* Start the capture */
-	ASSERT_EQ(scap_start_capture(h), SCAP_SUCCESS)
-	        << "unable to start the capture: " << scap_getlasterr(h) << std::endl;
+	ASSERT_EQ(scap_start_capture(h, error), SCAP_SUCCESS)
+	        << "unable to start the capture: " << error << std::endl;
 
 	/* 1. Generate a `close` event pair */
 	syscall(__NR_close, -1);
@@ -167,8 +169,8 @@ void check_event_order(scap_t *h) {
 	syscall(__NR_socketpair, 0, 0, 0, 0);
 
 	/* Stop the capture */
-	ASSERT_EQ(scap_stop_capture(h), SCAP_SUCCESS)
-	        << "unable to stop the capture: " << scap_getlasterr(h) << std::endl;
+	ASSERT_EQ(scap_stop_capture(h, error), SCAP_SUCCESS)
+	        << "unable to stop the capture: " << error << std::endl;
 
 	scap_evt *evt = NULL;
 	uint16_t buffer_id = 0;
@@ -180,7 +182,7 @@ void check_event_order(scap_t *h) {
 
 	for(int i = 0; i < EVENTS_TO_ASSERT; i++) {
 		while(true) {
-			ret = scap_next(h, &evt, &buffer_id, &flags);
+			ret = scap_next(h, &evt, &buffer_id, &flags, error);
 			if(ret == SCAP_SUCCESS) {
 				timeouts = 0;
 				if(evt->tid == actual_pid && evt->type == events_to_assert[i]) {

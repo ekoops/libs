@@ -57,6 +57,6 @@ bool is_sched_prog_fork_missing_child(const char* name);
 bool is_sched_prog_exec_missing_exit(const char* name);
 
 void fill_attached_prog_info(struct bpf_attached_prog* prog, bool raw_tp, const char* name, int fd);
-int attach_bpf_prog(struct bpf_attached_prog* prog, char* last_err);
+int attach_bpf_prog(struct bpf_attached_prog* prog, char* error);
 void detach_bpf_prog(struct bpf_attached_prog* prog);
 void unload_bpf_prog(struct bpf_attached_prog* prog);

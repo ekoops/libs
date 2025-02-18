@@ -152,12 +152,13 @@ public:
 
 class platform {
 public:
-	platform(char *lasterr, std::string &&root_path):
-	        m_lasterr(lasterr),
-	        m_root_path(std::move(root_path)) {}
+	platform(std::string &&root_path): m_root_path(std::move(root_path)) {}
 
-	uint32_t get_threadinfos(uint64_t *n, const scap_threadinfo **tinfos);
-	uint32_t get_fdinfos(const scap_threadinfo *tinfo, uint64_t *n, const scap_fdinfo **fdinfos);
+	uint32_t get_threadinfos(uint64_t *n, const scap_threadinfo **tinfos, char *error);
+	uint32_t get_fdinfos(const scap_threadinfo *tinfo,
+	                     uint64_t *n,
+	                     const scap_fdinfo **fdinfos,
+	                     char *error);
 
 	// obtains a unique ID for each active sandbox
 	uint32_t get_numeric_sandbox_id(std::string container_id);
@@ -171,35 +172,37 @@ private:
 
 	std::unordered_map<std::string, uint32_t> m_sandbox_ids;
 
-	char *m_lasterr;
 	std::string m_root_path;
 };
 
 class engine {
 public:
-	engine(char *lasterr);
+	engine();
 	~engine();
 	int32_t init(std::string config_path,
 	             std::string root_path,
 	             bool no_events,
 	             int epoll_timeout,
-	             scap_gvisor_platform *platform);
-	int32_t close();
+	             scap_gvisor_platform *platform,
+	             char *error);
+	int32_t close(char *error);
 
-	int32_t start_capture();
-	int32_t stop_capture();
+	int32_t start_capture(char *error);
+	int32_t stop_capture(char *error);
 
-	int32_t next(scap_evt **pevent, uint16_t *pdevid, uint32_t *pflags);
+	int32_t next(scap_evt **pevent, uint16_t *pdevid, uint32_t *pflags, char *error);
 
 	uint32_t get_vxid(uint64_t pid) const;
-	int32_t get_stats(scap_stats *stats) const;
-	const struct metrics_v2 *get_stats_v2(uint32_t flags, uint32_t *nstats, int32_t *rc);
+	int32_t get_stats(scap_stats *stats, char *error) const;
+	const struct metrics_v2 *get_stats_v2(uint32_t flags,
+	                                      uint32_t *nstats,
+	                                      int32_t *rc,
+	                                      char *error);
 
 private:
-	int32_t process_message_from_fd(int fd);
+	int32_t process_message_from_fd(int fd, char *error);
 	void free_sandbox_buffers();
 
-	char *m_lasterr = nullptr;
 	int m_listenfd = 0;
 	int m_epollfd = 0;
 	int m_epoll_timeout = -1;

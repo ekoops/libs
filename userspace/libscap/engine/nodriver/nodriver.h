@@ -22,5 +22,6 @@ limitations under the License.
 struct scap;
 
 struct nodriver_engine {
-	char* m_lasterr;
+	// placeholder is here just to avoid a 0-size struct. Remove it as the first field is added.
+	char placeholder;
 };

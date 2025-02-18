@@ -31,6 +31,7 @@ limitations under the License.
 #include <sys/utsname.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <libscap/strerror.h>
 
 static int32_t scap_linux_close_platform(struct scap_platform* platform) {
 	struct scap_linux_platform* linux_platform = (struct scap_linux_platform*)platform;
@@ -51,24 +52,23 @@ static void scap_linux_free_platform(struct scap_platform* platform) {
 }
 
 int32_t scap_linux_init_platform(struct scap_platform* platform,
-                                 char* lasterr,
                                  struct scap_engine_handle engine,
-                                 struct scap_open_args* oargs) {
+                                 struct scap_open_args* oargs,
+                                 char* error) {
 	int rc;
 	struct scap_linux_platform* linux_platform = (struct scap_linux_platform*)platform;
-	linux_platform->m_lasterr = lasterr;
 	linux_platform->m_engine = engine;
 	linux_platform->m_proc_scan_timeout_ms = oargs->proc_scan_timeout_ms;
 	linux_platform->m_proc_scan_log_interval_ms = oargs->proc_scan_log_interval_ms;
 	linux_platform->m_log_fn = oargs->log_fn;
 
-	if(scap_os_get_machine_info(&platform->m_machine_info, lasterr) != SCAP_SUCCESS) {
+	if(scap_os_get_machine_info(&platform->m_machine_info, error) != SCAP_SUCCESS) {
 		return SCAP_FAILURE;
 	}
 
 	scap_os_get_agent_info(&platform->m_agent_info);
 
-	rc = scap_linux_create_iflist(platform);
+	rc = scap_linux_create_iflist(platform, error);
 	if(rc != SCAP_SUCCESS) {
 		scap_linux_free_platform(platform);
 		return rc;
@@ -82,24 +82,21 @@ int32_t scap_linux_init_platform(struct scap_platform* platform,
 		}
 	}
 
-	rc = scap_cgroup_interface_init(&linux_platform->m_cgroups,
-	                                scap_get_host_root(),
-	                                lasterr,
-	                                true);
+	rc = scap_cgroup_interface_init(&linux_platform->m_cgroups, scap_get_host_root(), true, error);
 	if(rc != SCAP_SUCCESS) {
 		scap_linux_free_platform(platform);
 		return rc;
 	}
 
-	linux_platform->m_lasterr[0] = '\0';
 	char proc_scan_err[SCAP_LASTERR_SIZE];
-	rc = scap_linux_refresh_proc_table(platform, &platform->m_proclist);
+	rc = scap_linux_refresh_proc_table(platform, &platform->m_proclist, proc_scan_err);
 	if(rc != SCAP_SUCCESS) {
-		snprintf(linux_platform->m_lasterr,
-		         SCAP_LASTERR_SIZE,
-		         "scap_open_live_int() error creating the process list: %s. Make sure you have "
-		         "root credentials.",
-		         proc_scan_err);
+		scap_errprintf(
+		        error,
+		        0,
+		        "scap_open_live_int() error creating the process list: %s. Make sure you have "
+		        "root credentials.",
+		        proc_scan_err);
 		scap_linux_free_platform(platform);
 		return rc;
 	}

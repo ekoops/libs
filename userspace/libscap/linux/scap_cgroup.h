@@ -58,8 +58,8 @@ struct scap_cgroup_interface {
 
 int32_t scap_cgroup_interface_init(struct scap_cgroup_interface* cgi,
                                    const char* host_root,
-                                   char* error,
-                                   bool with_self_cg);
+                                   bool with_self_cg,
+                                   char* error);
 
 int32_t scap_cgroup_get_thread(struct scap_cgroup_interface* cgi,
                                const char* procdirname,

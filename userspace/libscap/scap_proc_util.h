@@ -35,21 +35,24 @@ typedef struct scap_threadinfo scap_threadinfo;
  * @param tinfo a thread pointer returned by get_threadinfos
  * @param n [out] the number of scap_fdinfo structures returned
  * @param fdinfos [out] an array of scap_fdinfo structures
+ * @param error [out] pointer to a buffer that will contain the error string in case the
+ *              function fails. The buffer must have size SCAP_LASTERR_SIZE
  * @return SCAP_SUCCESS or a failure code
  *
  */
 typedef int32_t (*get_fdinfos_fn)(void *ctx,
                                   const scap_threadinfo *tinfo,
                                   uint64_t *n,
-                                  const scap_fdinfo **fdinfos);
+                                  const scap_fdinfo **fdinfos,
+                                  char *error);
 
 // Scan process information from engine vtable
-int32_t scap_proc_scan_vtable(char *error,
-                              struct scap_proclist *proclist,
+int32_t scap_proc_scan_vtable(struct scap_proclist *proclist,
                               uint64_t n_tinfos,
                               const scap_threadinfo *tinfos,
                               void *ctx,
-                              get_fdinfos_fn get_fdinfos);
+                              get_fdinfos_fn get_fdinfos,
+                              char *error);
 
 #ifdef __cplusplus
 };

@@ -30,6 +30,7 @@ limitations under the License.
 #include <libscap/scap-int.h>
 #include <libscap/strl.h>
 #include <libscap/scap_gettimeofday.h>
+#include <libscap/strerror.h>
 
 static const char* const source_plugin_counters_stats_names[] = {
         [N_EVTS] = "n_evts",
@@ -99,15 +100,11 @@ static int32_t plugin_rc_to_scap_rc(ss_plugin_rc plugin_rc) {
 	return SCAP_FAILURE;
 }
 
-static void* alloc_handle(scap_t* main_handle, char* lasterr_ptr) {
-	struct source_plugin_engine* engine = calloc(1, sizeof(struct source_plugin_engine));
-	if(engine) {
-		engine->m_lasterr = lasterr_ptr;
-	}
-	return engine;
+static void* alloc_handle(scap_t* main_handle) {
+	return calloc(1, sizeof(struct source_plugin_engine));
 }
 
-static int32_t init(scap_t* main_handle, scap_open_args* oargs) {
+static int32_t init(scap_t* main_handle, scap_open_args* oargs, char* error) {
 	int32_t rc;
 	struct source_plugin_engine* handle = main_handle->m_engine.m_handle;
 	struct scap_source_plugin_engine_params* params = oargs->engine_params;
@@ -131,13 +128,13 @@ static int32_t init(scap_t* main_handle, scap_open_args* oargs) {
 
 	if(rc != SCAP_SUCCESS) {
 		const char* errstr = handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s", errstr);
+		scap_errprintf(error, 0, "%s", errstr);
 	}
 
 	return rc;
 }
 
-static int close_engine(struct scap_engine_handle engine) {
+static int close_engine(struct scap_engine_handle engine, char* error) {
 	struct source_plugin_engine* handle = engine.m_handle;
 
 	// We could arrive here without having initialized 'm_input_plugin'.
@@ -152,9 +149,9 @@ static int close_engine(struct scap_engine_handle engine) {
 static int32_t next(struct scap_engine_handle engine,
                     scap_evt** pevent,
                     uint16_t* pdevid,
-                    uint32_t* pflags) {
+                    uint32_t* pflags,
+                    char* error) {
 	struct source_plugin_engine* handle = engine.m_handle;
-	char* lasterr = HANDLE(engine)->m_lasterr;
 
 	/* we have to read a new batch */
 	if(handle->m_input_plugin_batch_idx >= handle->m_input_plugin_batch_nevts) {
@@ -163,7 +160,7 @@ static int32_t next(struct scap_engine_handle engine,
 			   handle->m_input_plugin_last_batch_res != SCAP_EOF) {
 				const char* errstr =
 				        handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
-				strlcpy(lasterr, errstr, SCAP_LASTERR_SIZE);
+				scap_errprintf(error, 0, "%s", errstr);
 			}
 			int32_t tres = handle->m_input_plugin_last_batch_res;
 			handle->m_input_plugin_last_batch_res = SCAP_SUCCESS;
@@ -179,10 +176,10 @@ static int32_t next(struct scap_engine_handle engine,
 
 		if(handle->m_input_plugin_batch_nevts == 0) {
 			if(handle->m_input_plugin_last_batch_res == SCAP_SUCCESS) {
-				snprintf(lasterr,
-				         SCAP_LASTERR_SIZE,
-				         "unexpected 0 size event returned by plugin %s",
-				         handle->m_input_plugin->name);
+				scap_errprintf(error,
+				               0,
+				               "unexpected 0 size event returned by plugin %s",
+				               handle->m_input_plugin->name);
 				ASSERT(false);
 				return SCAP_FAILURE;
 			} else {
@@ -190,7 +187,7 @@ static int32_t next(struct scap_engine_handle engine,
 				   handle->m_input_plugin_last_batch_res != SCAP_EOF) {
 					const char* errstr =
 					        handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
-					snprintf(lasterr, SCAP_LASTERR_SIZE, "%s", errstr);
+					scap_errprintf(error, 0, "%s", errstr);
 				}
 				return handle->m_input_plugin_last_batch_res;
 			}
@@ -216,11 +213,10 @@ static int32_t next(struct scap_engine_handle engine,
 		 * PPME_PLUGINEVENT_E has EF_LARGE_PAYLOAD flag!
 		 */
 		if(evt->type != PPME_PLUGINEVENT_E || evt->nparams != 2) {
-			snprintf(lasterr,
-			         SCAP_LASTERR_SIZE,
-			         "malformed plugin event produced by plugin: '%s'",
-			         handle->m_input_plugin->name);
-			return SCAP_FAILURE;
+			return scap_errprintf(error,
+			                      0,
+			                      "malformed plugin event produced by plugin: '%s'",
+			                      handle->m_input_plugin->name);
 		}
 
 		// forcely setting plugin ID with the one of the open plugin
@@ -228,25 +224,24 @@ static int32_t next(struct scap_engine_handle engine,
 			plugin_id = handle->m_input_plugin->id;
 			memcpy(pplugin_id, &plugin_id, sizeof(plugin_id));
 		} else if(plugin_id != handle->m_input_plugin->id) {
-			snprintf(lasterr,
-			         SCAP_LASTERR_SIZE,
-			         "unexpected plugin ID in plugin event: plugin='%s', expected_id=%d, "
-			         "actual_id=%d",
-			         handle->m_input_plugin->name,
-			         handle->m_input_plugin->id,
-			         plugin_id);
-			return SCAP_FAILURE;
+			return scap_errprintf(
+			        error,
+			        0,
+			        "unexpected plugin ID in plugin event: plugin='%s', expected_id=%d, "
+			        "actual_id=%d",
+			        handle->m_input_plugin->name,
+			        handle->m_input_plugin->id,
+			        plugin_id);
 		}
 	}
 
 	if(evt->type == PPME_PLUGINEVENT_E) {
 		// a zero plugin ID is not allowed for PPME_PLUGINEVENT_E
 		if(plugin_id == 0) {
-			snprintf(lasterr,
-			         SCAP_LASTERR_SIZE,
-			         "malformed plugin event produced by plugin (no ID): '%s'",
-			         handle->m_input_plugin->name);
-			return SCAP_FAILURE;
+			return scap_errprintf(error,
+			                      0,
+			                      "malformed plugin event produced by plugin (no ID): '%s'",
+			                      handle->m_input_plugin->name);
 		}
 
 		// plugin events have no thread associated
@@ -266,7 +261,7 @@ static int32_t next(struct scap_engine_handle engine,
 	return SCAP_SUCCESS;
 }
 
-static int32_t get_stats(struct scap_engine_handle engine, scap_stats* stats) {
+static int32_t get_stats(struct scap_engine_handle engine, scap_stats* stats, char* error) {
 	struct source_plugin_engine* handle = engine.m_handle;
 	stats->n_evts = handle->m_nevts;
 	return SCAP_SUCCESS;
@@ -275,7 +270,8 @@ static int32_t get_stats(struct scap_engine_handle engine, scap_stats* stats) {
 const struct metrics_v2* get_source_plugin_stats_v2(struct scap_engine_handle engine,
                                                     uint32_t flags,
                                                     uint32_t* nstats,
-                                                    int32_t* rc) {
+                                                    int32_t* rc,
+                                                    char* error) {
 	struct source_plugin_engine* handle = engine.m_handle;
 	*nstats = MAX_SOURCE_PLUGIN_COUNTERS_STATS;
 	metrics_v2* stats = handle->m_stats;

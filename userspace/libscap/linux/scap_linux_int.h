@@ -41,8 +41,8 @@ typedef struct _scap_agent_info scap_agent_info;
 typedef struct _scap_machine_info scap_machine_info;
 
 void scap_os_get_agent_info(scap_agent_info* agent_info);
-int32_t scap_os_get_machine_info(scap_machine_info* machine_info, char* lasterr);
-int32_t scap_linux_create_iflist(struct scap_platform* platform);
+int32_t scap_os_get_machine_info(scap_machine_info* machine_info, char* error);
+int32_t scap_linux_create_iflist(struct scap_platform* platform, char* error);
 int32_t scap_linux_create_userlist(struct scap_platform* platform);
 
 uint32_t scap_linux_get_device_by_mount_id(struct scap_platform* platform,
@@ -51,9 +51,11 @@ uint32_t scap_linux_get_device_by_mount_id(struct scap_platform* platform,
 int32_t scap_linux_proc_get(struct scap_platform* platform,
                             int64_t tid,
                             struct scap_threadinfo* tinfo,
-                            bool scan_sockets);
+                            bool scan_sockets,
+                            char* error);
 int32_t scap_linux_refresh_proc_table(struct scap_platform* platform,
-                                      struct scap_proclist* proclist);
+                                      struct scap_proclist* proclist,
+                                      char* error);
 bool scap_linux_is_thread_alive(struct scap_platform* platform,
                                 int64_t pid,
                                 int64_t tid,
@@ -61,10 +63,10 @@ bool scap_linux_is_thread_alive(struct scap_platform* platform,
 int32_t scap_linux_getpid_global(struct scap_platform* platform, int64_t* pid, char* error);
 int32_t scap_linux_get_threadlist(struct scap_platform* platform,
                                   struct ppm_proclist_info** procinfo_p,
-                                  char* lasterr);
+                                  char* error);
 int32_t scap_linux_get_fdlist(struct scap_platform* platform,
                               struct scap_threadinfo* tinfo,
-                              char* lasterr);
+                              char* error);
 
 // read all sockets and add them to the socket table hashed by their ino
 int32_t scap_fd_read_sockets(char* procdir, struct scap_ns_socket_list* sockets, char* error);
