@@ -197,7 +197,7 @@ TEST_F(sinsp_with_test_input, EXECVE_exepath_without_trusted_exepath) {
 	add_event_advance_ts(increasing_ts(),
 	                     new_tid,
 	                     PPME_SYSCALL_EXECVE_19_X,
-	                     27,
+	                     31,
 	                     retval,
 	                     pathname.c_str(),
 	                     empty_bytebuf,
@@ -224,7 +224,11 @@ TEST_F(sinsp_with_test_input, EXECVE_exepath_without_trusted_exepath) {
 	                     not_relevant_64,
 	                     not_relevant_64,
 	                     not_relevant_64,
-	                     not_relevant_32);
+	                     not_relevant_32,
+	                     "",
+	                     not_relevant_64,
+	                     not_relevant_32,
+	                     pathname.c_str());
 
 	const auto& thread_manager = m_inspector.m_thread_manager;
 

@@ -190,7 +190,7 @@ TEST(SyscallExit, execveX_failure) {
 
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)errno_value);
 
 	/* Parameter 2: exe (type: PT_CHARBUF) */
@@ -308,9 +308,12 @@ TEST(SyscallExit, execveX_failure) {
 	/* Parameter 30: egid (type: PT_GID) */
 	evt_test->assert_numeric_param(30, (uint32_t)getegid(), EQUAL);
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 
 TEST(SyscallExit, execveX_failure_args_env_NULL) {
@@ -340,7 +343,7 @@ TEST(SyscallExit, execveX_failure_args_env_NULL) {
 
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)errno_value);
 
 	/* Parameter 2: exe (type: PT_CHARBUF) */
@@ -353,9 +356,12 @@ TEST(SyscallExit, execveX_failure_args_env_NULL) {
 	/* Parameter 16: env (type: PT_CHARBUFARRAY) */
 	evt_test->assert_empty_param(16);
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 
 TEST(SyscallExit, execveX_failure_path_NULL_but_not_args) {
@@ -389,7 +395,7 @@ TEST(SyscallExit, execveX_failure_path_NULL_but_not_args) {
 
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)errno_value);
 
 	/* Parameter 2: exe (type: PT_CHARBUF) */
@@ -401,9 +407,12 @@ TEST(SyscallExit, execveX_failure_path_NULL_but_not_args) {
 	/* Parameter 16: env (type: PT_CHARBUFARRAY) */
 	evt_test->assert_charbuf_array_param(16, &newenviron[0]);
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 
 TEST(SyscallExit, execveX_success) {
@@ -493,7 +502,7 @@ TEST(SyscallExit, execveX_success) {
 
 	/* Please note here we cannot assert all the params, we check only the possible ones. */
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)0);
 
 	/* Parameter 2: exe (type: PT_CHARBUF) */
@@ -559,9 +568,12 @@ TEST(SyscallExit, execveX_success) {
 	/* Parameter 30: egid (type: PT_GID) */
 	evt_test->assert_numeric_param(30, (uint32_t)getegid(), EQUAL);
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 
 TEST(SyscallExit, execveX_not_upperlayer) {
@@ -632,7 +644,7 @@ TEST(SyscallExit, execveX_not_upperlayer) {
 
 	/* Please note here we cannot assert all the params, we check only the possible ones. */
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)0);
 
 	/* Parameter 2: exe (type: PT_CHARBUF) */
@@ -690,9 +702,12 @@ TEST(SyscallExit, execveX_not_upperlayer) {
 	/* Parameter 30: egid (type: PT_GID) */
 	evt_test->assert_numeric_param(30, (uint32_t)getegid(), EQUAL);
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, merged_exe_path);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 
 TEST(SyscallExit, execveX_upperlayer_success) {
@@ -762,7 +777,7 @@ TEST(SyscallExit, execveX_upperlayer_success) {
 
 	/* Please note here we cannot assert all the params, we check only the possible ones. */
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)0);
 
 	/* Parameter 2: exe (type: PT_CHARBUF) */
@@ -820,9 +835,12 @@ TEST(SyscallExit, execveX_upperlayer_success) {
 	/* Parameter 30: egid (type: PT_GID) */
 	evt_test->assert_numeric_param(30, (uint32_t)getegid(), EQUAL);
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 
 #if defined(__NR_memfd_create) && defined(__NR_openat) && defined(__NR_read) && defined(__NR_write)
@@ -869,9 +887,9 @@ TEST(SyscallExit, execveX_success_memfd) {
 	cl_args.exit_signal = SIGCHLD;
 	pid_t ret_pid = syscall(__NR_clone3, &cl_args, sizeof(cl_args));
 
+	char pathname[200];
+	snprintf(pathname, sizeof(pathname), "/proc/%d/fd/%d", getpid(), mem_fd);
 	if(ret_pid == 0) {
-		char pathname[200];
-		snprintf(pathname, sizeof(pathname), "/proc/%d/fd/%d", getpid(), mem_fd);
 		const char *newargv[] = {pathname, "[OUTPUT] SyscallExit.execveX_success_memfd", NULL};
 		const char *newenviron[] = {"IN_TEST=yes", "3_ARGUMENT=yes", "2_ARGUMENT=no", NULL};
 		syscall(__NR_execve, pathname, newargv, newenviron);
@@ -913,7 +931,7 @@ TEST(SyscallExit, execveX_success_memfd) {
 
 	/* Please note here we cannot assert all the params, we check only the possible ones. */
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)0);
 
 	/* PPM_EXE_WRITABLE is set when the user that executed a process can also write to the
@@ -932,9 +950,12 @@ TEST(SyscallExit, execveX_success_memfd) {
 		evt_test->assert_charbuf_param(28, "memfd:malware");
 	}
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 #endif
 
@@ -1013,7 +1034,7 @@ TEST(SyscallExit, execveX_symlink) {
 
 	/* Please note here we cannot assert all the params, we check only the possible ones. */
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)0);
 
 	/* Parameter 2: exe (type: PT_CHARBUF) */
@@ -1025,9 +1046,12 @@ TEST(SyscallExit, execveX_symlink) {
 	/* Parameter 28: resolve_path (type: PT_CHARBUF) */
 	evt_test->assert_charbuf_param(28, pathname);
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 #endif
 
@@ -1087,7 +1111,7 @@ TEST(SyscallExit, execveX_failure_empty_arg) {
 
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)errno_value);
 
 	/* Parameter 2: exe (type: PT_CHARBUF) */
@@ -1194,9 +1218,12 @@ TEST(SyscallExit, execveX_failure_empty_arg) {
 	/* Parameter 30: egid (type: PT_GID) */
 	evt_test->assert_numeric_param(30, (uint32_t)getegid(), EQUAL);
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 
 #endif

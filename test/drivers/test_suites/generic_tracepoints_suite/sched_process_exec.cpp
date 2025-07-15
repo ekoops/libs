@@ -85,7 +85,7 @@ TEST(GenericTracepoints, sched_proc_exec) {
 
 	/* Please note here we cannot assert all the params, we check only the possible ones. */
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)0);
 
 	/* Parameter 2: exe (type: PT_CHARBUF) */
@@ -137,9 +137,12 @@ TEST(GenericTracepoints, sched_proc_exec) {
 	/* Parameter 28: trusted_exepath (type: PT_FSPATH) */
 	evt_test->assert_charbuf_param(28, pathname);
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 
 #if defined(__NR_memfd_create) && defined(__NR_openat) && defined(__NR_read) && defined(__NR_write)
@@ -186,9 +189,9 @@ TEST(GenericTracepoints, sched_proc_exec_success_memfd) {
 	cl_args.exit_signal = SIGCHLD;
 	pid_t ret_pid = syscall(__NR_clone3, &cl_args, sizeof(cl_args));
 
+	char pathname[200];
+	snprintf(pathname, sizeof(pathname), "/proc/%d/fd/%d", getpid(), mem_fd);
 	if(ret_pid == 0) {
-		char pathname[200];
-		snprintf(pathname, sizeof(pathname), "/proc/%d/fd/%d", getpid(), mem_fd);
 		const char *newargv[] = {pathname, "[OUTPUT] SyscallExit.execveX_success_memfd", NULL};
 		const char *newenviron[] = {"IN_TEST=yes", "3_ARGUMENT=yes", "2_ARGUMENT=no", NULL};
 		syscall(__NR_execve, pathname, newargv, newenviron);
@@ -230,7 +233,7 @@ TEST(GenericTracepoints, sched_proc_exec_success_memfd) {
 
 	/* Please note here we cannot assert all the params, we check only the possible ones. */
 
-	/* Parameter 1: res (type: PT_ERRNO)*/
+	/* Parameter 1: res (type: PT_ERRNO) */
 	evt_test->assert_numeric_param(1, (int64_t)0);
 
 	/* PPM_EXE_WRITABLE is set when the user that executed a process can also write to the
@@ -249,9 +252,12 @@ TEST(GenericTracepoints, sched_proc_exec_success_memfd) {
 		evt_test->assert_charbuf_param(28, "memfd:malware");
 	}
 
+	/* Parameter 31: pathname (type: PT_FSRELPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 #endif
 #endif

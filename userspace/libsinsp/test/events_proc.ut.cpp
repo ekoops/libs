@@ -67,7 +67,7 @@ TEST_F(sinsp_with_test_input, execveat_empty_path_flag) {
 	evt = add_event_advance_ts(increasing_ts(),
 	                           1,
 	                           PPME_SYSCALL_EXECVE_19_X,
-	                           23,
+	                           31,
 	                           (int64_t)0,
 	                           "<NA>",
 	                           empty_bytebuf,
@@ -90,7 +90,15 @@ TEST_F(sinsp_with_test_input, execveat_empty_path_flag) {
 	                           0,
 	                           (uint64_t)0,
 	                           (uint64_t)0,
-	                           (uint64_t)0);
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint32_t)0,
+	                           "<NA>",
+	                           (int64_t)0,
+	                           (uint32_t)0,
+	                           "<NA>");
 
 	/* The `exepath` should be the file pointed by the `dirfd` since `execveat` is called with
 	 * `AT_EMPTY_PATH` flag.
@@ -140,7 +148,7 @@ TEST_F(sinsp_with_test_input, execveat_relative_path) {
 	evt = add_event_advance_ts(increasing_ts(),
 	                           1,
 	                           PPME_SYSCALL_EXECVE_19_X,
-	                           23,
+	                           31,
 	                           (int64_t)0,
 	                           "<NA>",
 	                           empty_bytebuf,
@@ -163,7 +171,15 @@ TEST_F(sinsp_with_test_input, execveat_relative_path) {
 	                           0,
 	                           (uint64_t)0,
 	                           (uint64_t)0,
-	                           (uint64_t)0);
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint32_t)0,
+	                           "<NA>",
+	                           (int64_t)0,
+	                           (uint32_t)0,
+	                           "<NA>");
 
 	/* The `exepath` should be the directory pointed by the `dirfd` + the pathname
 	 * specified in the `execveat` enter event.
@@ -216,7 +232,7 @@ TEST_F(sinsp_with_test_input, execveat_invalid_path) {
 	evt = add_event_advance_ts(increasing_ts(),
 	                           1,
 	                           PPME_SYSCALL_EXECVE_19_X,
-	                           23,
+	                           31,
 	                           (int64_t)0,
 	                           "<NA>",
 	                           empty_bytebuf,
@@ -239,7 +255,15 @@ TEST_F(sinsp_with_test_input, execveat_invalid_path) {
 	                           0,
 	                           (uint64_t)0,
 	                           (uint64_t)0,
-	                           (uint64_t)0);
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint32_t)0,
+	                           "<NA>",
+	                           (int64_t)0,
+	                           (uint32_t)0,
+	                           "<NA>");
 
 	/* The `exepath` should be `<NA>`, sinsp should recognize that the `pathname`
 	 * is invalid and should set `<NA>`.
@@ -279,7 +303,7 @@ TEST_F(sinsp_with_test_input, execveat_absolute_path) {
 	evt = add_event_advance_ts(increasing_ts(),
 	                           1,
 	                           PPME_SYSCALL_EXECVE_19_X,
-	                           23,
+	                           31,
 	                           (int64_t)0,
 	                           "<NA>",
 	                           empty_bytebuf,
@@ -302,7 +326,15 @@ TEST_F(sinsp_with_test_input, execveat_absolute_path) {
 	                           0,
 	                           (uint64_t)0,
 	                           (uint64_t)0,
-	                           (uint64_t)0);
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint32_t)0,
+	                           "<NA>",
+	                           (int64_t)0,
+	                           (uint32_t)0,
+	                           "<NA>");
 
 	/* The `exepath` should be the absolute file path that we passed in the
 	 * `execveat` enter event.
@@ -599,7 +631,7 @@ TEST_F(sinsp_with_test_input, spawn_process) {
 	uint64_t parent_pid = 1, parent_tid = 1, child_pid = 20, child_tid = 20, null_pid = 0;
 	uint64_t fdlimit = 1024, pgft_maj = 0, pgft_min = 1;
 	uint64_t exe_ino = 242048, ctime = 1676262698000004588, mtime = 1676262698000004577;
-	uint32_t loginuid = UINT32_MAX - 1, euid = 2000U;
+	uint32_t loginuid = UINT32_MAX - 1, euid = 2000U, egid = 2000U;
 
 	scap_const_sized_buffer empty_bytebuf = {.buf = nullptr, .size = 0};
 
@@ -686,7 +718,7 @@ TEST_F(sinsp_with_test_input, spawn_process) {
 	evt = add_event_advance_ts(increasing_ts(),
 	                           child_tid,
 	                           PPME_SYSCALL_EXECVE_19_X,
-	                           27,
+	                           31,
 	                           (int64_t)0,
 	                           "/bin/test-exe",
 	                           scap_const_sized_buffer{argsv.data(), argsv.size()},
@@ -713,7 +745,11 @@ TEST_F(sinsp_with_test_input, spawn_process) {
 	                           exe_ino,
 	                           ctime,
 	                           mtime,
-	                           euid);
+	                           euid,
+	                           "/bin/test-exe",
+	                           parent_tid,
+	                           egid,
+	                           "/bin/test-exe");
 
 	// check that the cwd is inherited from the parent (default process has /root/)
 	ASSERT_EQ(get_field_as_string(evt, "proc.cwd"), "/root/");
@@ -958,7 +994,7 @@ TEST_F(sinsp_with_test_input, pid_over_32bit) {
 	evt = add_event_advance_ts(increasing_ts(),
 	                           child_tid,
 	                           PPME_SYSCALL_EXECVE_19_X,
-	                           20,
+	                           31,
 	                           (int64_t)0,
 	                           "/bin/test-exe",
 	                           scap_const_sized_buffer{argsv.data(), argsv.size()},
@@ -978,7 +1014,18 @@ TEST_F(sinsp_with_test_input, pid_over_32bit) {
 	                           (uint32_t)34818,
 	                           parent_pid,
 	                           (int32_t)1000,
-	                           (uint32_t)1);
+	                           (uint32_t)1,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint32_t)0,
+	                           "/bin/test-exe",
+	                           (int64_t)0,
+	                           (uint32_t)0,
+	                           "/bin/test-exe");
 
 	ASSERT_FALSE(field_has_value(evt, "proc.pid"));
 	ASSERT_FALSE(field_has_value(evt, "thread.tid"));
@@ -1056,7 +1103,7 @@ TEST_F(sinsp_with_test_input, pid_over_32bit) {
 	evt = add_event_advance_ts(increasing_ts(),
 	                           child2_tid,
 	                           PPME_SYSCALL_EXECVE_19_X,
-	                           20,
+	                           31,
 	                           (int64_t)0,
 	                           "/bin/test-exe2",
 	                           scap_const_sized_buffer{argsv.data(), argsv.size()},
@@ -1076,7 +1123,18 @@ TEST_F(sinsp_with_test_input, pid_over_32bit) {
 	                           (uint32_t)34818,
 	                           child_pid,
 	                           (int32_t)1000,
-	                           (uint32_t)1);
+	                           (uint32_t)1,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint32_t)0,
+	                           "/bin/test-exe2",
+	                           (int64_t)0,
+	                           (uint32_t)0,
+	                           "/bin/test-exe2");
 
 	ASSERT_FALSE(field_has_value(evt, "proc.pid"));
 	ASSERT_FALSE(field_has_value(evt, "thread.tid"));
@@ -1184,7 +1242,7 @@ TEST_F(sinsp_with_test_input, last_exec_ts) {
 	evt = add_event_advance_ts(increasing_ts(),
 	                           child_tid,
 	                           PPME_SYSCALL_EXECVE_19_X,
-	                           20,
+	                           31,
 	                           (int64_t)0,
 	                           "/bin/test-exe",
 	                           scap_const_sized_buffer{argsv.data(), argsv.size()},
@@ -1204,7 +1262,18 @@ TEST_F(sinsp_with_test_input, last_exec_ts) {
 	                           (uint32_t)34818,
 	                           parent_pid,
 	                           (uint32_t)1000,
-	                           (uint32_t)1);
+	                           (uint32_t)1,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint64_t)0,
+	                           (uint32_t)0,
+	                           "/bin/test-exe",
+	                           (int64_t)0,
+	                           (uint32_t)0,
+	                           "/bin/test-exe");
 
 	// Check last exec was recorded
 	ASSERT_GT(evt->get_thread_info()->m_lastexec_ts, 0);

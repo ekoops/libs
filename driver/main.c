@@ -123,13 +123,19 @@ struct event_data_t {
 			struct k_sigaction *ka;
 		} signal_data;
 
+#ifdef CAPTURE_SCHED_PROC_EXEC
+		/* Here we save only the bprm struct pointer since it is the
+		 * unique parameter we will use in our `f_sched_prog_exec`
+		 * filler. */
+		struct {
+			struct linux_binprm *bprm;
+		} sched_proc_exec_data;
+#endif
+
 #ifdef CAPTURE_SCHED_PROC_FORK
 		/* Here we save only the child task struct since it is the
 		 * unique parameter we will use in our `f_sched_prog_fork`
-		 * filler. On the other side the `f_sched_prog_exec` filler
-		 * won't need any tracepoint parameter so we don't need a
-		 * internal struct here.
-		 */
+		 * filler. */
 		struct {
 			struct task_struct *child;
 		} sched_proc_fork_data;
@@ -1982,6 +1988,7 @@ static int record_event_consumer(struct ppm_consumer_t *consumer,
 		switch(event_datap->category) {
 #ifdef CAPTURE_SCHED_PROC_EXEC
 		case PPMC_SCHED_PROC_EXEC:
+			args.sched_proc_exec_data.bprm = event_datap->event_info.sched_proc_exec_data.bprm;
 			cbres = f_sched_prog_exec(&args);
 			break;
 #endif
@@ -2531,6 +2538,7 @@ TRACEPOINT_PROBE(sched_proc_exec_probe,
 	}
 
 	event_data.category = PPMC_SCHED_PROC_EXEC;
+	event_data.event_info.sched_proc_exec_data.bprm = bprm;
 	record_event_all_consumers(PPME_SYSCALL_EXECVE_19_X,
 	                           UF_NEVER_DROP,
 	                           &event_data,

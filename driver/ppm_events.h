@@ -53,6 +53,12 @@ struct event_filler_arguments {
 	struct task_struct
 	        *sched_next; /* for context switch events, the task that is being scheduled in */
 
+#ifdef CAPTURE_SCHED_PROC_EXEC
+	struct {
+		struct linux_binprm *bprm;
+	} sched_proc_exec_data; /* Data available for sched_process_exec events. */
+#endif
+
 #ifdef CAPTURE_SCHED_PROC_FORK
 	struct task_struct *child; /* for sched_process_fork events, this is the child task */
 #endif
