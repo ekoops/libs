@@ -35,17 +35,23 @@ int pman_enforce_sc_set(bool *sc_set) {
 		sc_set = empty_sc_set;
 	}
 
-	int ret = 0;
-	int syscall_id = 0;
 	/* Special tracepoints, their attachment depends on interesting syscalls */
 	bool sys_enter = false;
 	bool sys_exit = false;
 	bool sched_prog_fork = false;
 	bool sched_prog_exec = false;
 
+	/* Special tracepoints, for TOCTOU mitigation. */
+	bool sys_enter_connect = false;
+	bool sys_enter_creat = false;
+	bool sys_enter_open = false;
+	bool sys_enter_openat = false;
+
+	int ret = 0;
+
 	/* Enforce interesting syscalls */
 	for(int sc = 0; sc < PPM_SC_MAX; sc++) {
-		syscall_id = scap_ppm_sc_to_native_id(sc);
+		const int syscall_id = scap_ppm_sc_to_native_id(sc);
 		/* if `syscall_id` is -1 this is not a syscall */
 		if(syscall_id == -1) {
 			continue;
@@ -69,7 +75,41 @@ int pman_enforce_sc_set(bool *sc_set) {
 		sched_prog_exec = true;
 	}
 
-	/* Enable desired tracepoints */
+	if(sys_exit) {
+		sys_enter_connect = sc_set[PPM_SC_CONNECT];
+		sys_enter_creat = sc_set[PPM_SC_CREAT];
+		sys_enter_open = sc_set[PPM_SC_OPEN];
+		sys_enter_openat = sc_set[PPM_SC_OPENAT];
+	}
+
+	/* Enable/disable desired tracepoints */
+
+	/* TOCTOU mitigation section.
+	 * Notice: attach tracepoints before the sys_exit dispatcher, because the tracepoint attachment
+	 * procedure generates an `openat` exit event on `/sys/kernel/tracing/events/.../id`, that would
+	 * pollute the stream of events read by our probe.
+	 */
+	if(sys_enter_connect)
+		ret = ret ?: pman_attach_sys_enter_connect();
+	else
+		ret = ret ?: pman_detach_sys_enter_connect();
+
+	if(sys_enter_creat)
+		ret = ret ?: pman_attach_sys_enter_creat();
+	else
+		ret = ret ?: pman_detach_sys_enter_creat();
+
+	if(sys_enter_open)
+		ret = ret ?: pman_attach_sys_enter_open();
+	else
+		ret = ret ?: pman_detach_sys_enter_open();
+
+	if(sys_enter_openat)
+		ret = ret ?: pman_attach_sys_enter_openat();
+	else
+		ret = ret ?: pman_detach_sys_enter_openat();
+
+	/* sys_enter and sys_exit dispatchers section. */
 	if(sys_enter)
 		ret = ret ?: pman_attach_syscall_enter_dispatcher();
 	else
@@ -80,6 +120,7 @@ int pman_enforce_sc_set(bool *sc_set) {
 	else
 		ret = ret ?: pman_detach_syscall_exit_dispatcher();
 
+	/* Special tracepoints section. */
 	if(sched_prog_fork)
 		ret = ret ?: pman_attach_sched_proc_fork();
 	else
