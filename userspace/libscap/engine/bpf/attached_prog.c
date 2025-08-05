@@ -162,6 +162,31 @@ bool is_sched_prog_exec_missing_exit(const char* name) {
 	       (memcmp(name, "sched/sched_process_exec", sizeof("sched/sched_process_exec") - 1) == 0);
 }
 
+bool is_sys_enter_connect(const char* name) {
+	const char expected_name[] = "syscalls/sys_enter_connect";
+	return strcmp(name, expected_name) == 0;
+}
+
+bool is_sys_enter_creat(const char* name) {
+	const char expected_name[] = "syscalls/sys_enter_creat";
+	return strcmp(name, expected_name) == 0;
+}
+
+bool is_sys_enter_open(const char* name) {
+	const char expected_name[] = "syscalls/sys_enter_open";
+	return strcmp(name, expected_name) == 0;
+}
+
+bool is_sys_enter_openat(const char* name) {
+	const char expected_name[] = "syscalls/sys_enter_openat";
+	return strcmp(name, expected_name) == 0;
+}
+
+bool is_sys_enter_openat2(const char* name) {
+	const char expected_name[] = "syscalls/sys_enter_openat2";
+	return strcmp(name, expected_name) == 0;
+}
+
 void fill_attached_prog_info(struct bpf_attached_prog* prog,
                              bool raw_tp,
                              const char* name,

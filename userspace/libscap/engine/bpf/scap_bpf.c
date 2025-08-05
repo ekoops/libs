@@ -405,9 +405,9 @@ static int32_t load_elf_maps_section(struct bpf_engine *handle,
 }
 
 static int32_t load_maps(struct bpf_engine *handle, struct bpf_map_data *maps, int nr_maps) {
-	int j;
+	bool is_tail_call_map_idx_set = false;
 
-	for(j = 0; j < nr_maps; ++j) {
+	for(int j = 0; j < nr_maps; ++j) {
 		if(j == SCAP_PERF_MAP || j == SCAP_LOCAL_STATE_MAP || j == SCAP_FRAME_SCRATCH_MAP ||
 		   j == SCAP_TMP_SCRATCH_MAP) {
 			// We allocate entries for all the available CPUs.
@@ -429,8 +429,18 @@ static int32_t load_maps(struct bpf_engine *handle, struct bpf_map_data *maps, i
 			                      j);
 		}
 
+		// We have two prog array maps to load:
+		// - the one containing normal fillers (tail call map)
+		// - the one containing TOCTOU mitigation fillers (TOCTOU mitigation tail call map)
+		// Rely on their relative positions (i.e.: "tail call map" first, then "TOCTOU mitigation
+		// tail call map") as we don't have a better way to do it.
 		if(maps[j].def.type == BPF_MAP_TYPE_PROG_ARRAY) {
-			handle->m_bpf_prog_array_map_idx = j;
+			if(!is_tail_call_map_idx_set) {
+				handle->m_bpf_tail_call_map_idx = j;
+				is_tail_call_map_idx_set = true;
+			} else {
+				handle->m_bpf_ttm_tail_call_map_idx = j;
+			}
 		}
 	}
 
@@ -505,16 +515,10 @@ static int32_t load_single_prog(struct bpf_engine *handle,
 	enum bpf_prog_type program_type;
 	size_t insns_cnt;
 	bool raw_tp;
-	int err;
 	int fd;
 	const char *final_section_name = NULL;
 
 	insns_cnt = size / sizeof(struct bpf_insn);
-
-	char *error = malloc(BPF_LOG_SIZE);
-	if(!error) {
-		return scap_errprintf(handle->m_lasterr, 0, "malloc(BPF_LOG_BUF_SIZE) failed");
-	}
 
 	const char *full_event = event;
 	if(memcmp(event, "raw_tracepoint/", sizeof("raw_tracepoint/") - 1) == 0) {
@@ -528,7 +532,6 @@ static int32_t load_single_prog(struct bpf_engine *handle,
 	}
 
 	if(*event == 0) {
-		free(error);
 		return scap_errprintf(handle->m_lasterr, 0, "event name cannot be empty");
 	}
 
@@ -540,6 +543,11 @@ static int32_t load_single_prog(struct bpf_engine *handle,
 		final_section_name++;
 	} else {
 		final_section_name = event;
+	}
+
+	char *error = malloc(BPF_LOG_SIZE);
+	if(!error) {
+		return scap_errprintf(handle->m_lasterr, 0, "malloc(BPF_LOG_BUF_SIZE) failed");
 	}
 
 	fd = bpf_load_program(prog, program_type, insns_cnt, error, BPF_LOG_SIZE, final_section_name);
@@ -581,6 +589,19 @@ static int32_t load_single_prog(struct bpf_engine *handle,
 			return scap_errprintf(handle->m_lasterr, 0, "filler name cannot be empty");
 		}
 
+		/* Determine if the filler is a TOCTOU mitigation filler. This is used later to choose the
+		 * right tail call map the filler program must be inserted into. */
+		bool is_ttm_filler = false;
+		if(memcmp(event, "toctou/", sizeof("toctou/") - 1) == 0) {
+			event += sizeof("toctou/") - 1;
+			if(*event == 0) {
+				return scap_errprintf(handle->m_lasterr,
+				                      0,
+				                      "TOCTOU mitigation filler name cannot be empty");
+			}
+			is_ttm_filler = true;
+		}
+
 		int prog_id = lookup_filler_id(event);
 		if(prog_id == -1) {
 			return scap_errprintf(handle->m_lasterr, 0, "invalid filler name: %s", event);
@@ -592,14 +613,18 @@ static int32_t load_single_prog(struct bpf_engine *handle,
 			                      BPF_PROGS_TAIL_CALLED_MAX);
 		}
 
-		/* Fill the tail table. The key is our filler internal code extracted
-		 * from `g_filler_names` in `lookup_filler_id` function. The value
-		 * is the program fd.
-		 */
-		err = bpf_map_update_elem(handle->m_bpf_map_fds[handle->m_bpf_prog_array_map_idx],
-		                          &prog_id,
-		                          &fd,
-		                          BPF_ANY);
+		/* Fill the right tail table. The key is our filler internal code extracted from
+		 * `g_filler_names` in `lookup_filler_id` function. The value is the program fd. */
+		int tail_call_map_idx;
+		if(!is_ttm_filler) {
+			tail_call_map_idx = handle->m_bpf_tail_call_map_idx;
+		} else {
+			tail_call_map_idx = handle->m_bpf_ttm_tail_call_map_idx;
+		}
+		const int err = bpf_map_update_elem(handle->m_bpf_map_fds[tail_call_map_idx],
+		                                    &prog_id,
+		                                    &fd,
+		                                    BPF_ANY);
 		if(err < 0) {
 			return scap_errprintf(handle->m_lasterr, -err, "failure populating program array");
 		}
@@ -668,6 +693,41 @@ static int32_t load_single_prog(struct bpf_engine *handle,
 
 	if(is_sched_prog_exec_missing_exit(event)) {
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXEC_MISSING_EXIT],
+		                        raw_tp,
+		                        event,
+		                        fd);
+	}
+
+	if(is_sys_enter_connect(event)) {
+		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_CONNECT],
+		                        raw_tp,
+		                        event,
+		                        fd);
+	}
+
+	if(is_sys_enter_creat(event)) {
+		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_CREAT],
+		                        raw_tp,
+		                        event,
+		                        fd);
+	}
+
+	if(is_sys_enter_open(event)) {
+		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_OPEN],
+		                        raw_tp,
+		                        event,
+		                        fd);
+	}
+
+	if(is_sys_enter_openat(event)) {
+		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_OPENAT],
+		                        raw_tp,
+		                        event,
+		                        fd);
+	}
+
+	if(is_sys_enter_openat2(event)) {
+		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_OPENAT2],
 		                        raw_tp,
 		                        event,
 		                        fd);
@@ -955,9 +1015,7 @@ static int32_t populate_ia32_to_64_map(struct bpf_engine *handle) {
 		                              &j,
 		                              x64_val,
 		                              BPF_ANY)) != 0) {
-			return scap_errprintf(handle->m_lasterr,
-			                      -ret,
-			                      "SCAP_FILLERS_TABLE bpf_map_update_elem ");
+			return scap_errprintf(handle->m_lasterr, -ret, "SCAP_IA32_64_MAP bpf_map_update_elem ");
 		}
 	}
 	return bpf_map_freeze(handle->m_bpf_map_fds[SCAP_IA32_64_MAP]);
@@ -972,8 +1030,6 @@ static int enforce_sc_set(struct bpf_engine *handle) {
 		sc_set = empty_sc_set;
 	}
 
-	int ret = 0;
-	int syscall_id = 0;
 	/* Special tracepoints, their attachment depends on interesting syscalls */
 	bool sys_enter = false;
 	bool sys_exit = false;
@@ -981,9 +1037,18 @@ static int enforce_sc_set(struct bpf_engine *handle) {
 	bool sched_prog_fork_missing_child = false;
 	bool sched_prog_exec = false;
 
+	/* Special tracepoints, for TOCTOU mitigation. */
+	bool sys_enter_connect = false;
+	bool sys_enter_creat = false;
+	bool sys_enter_open = false;
+	bool sys_enter_openat = false;
+	bool sys_enter_openat2 = false;
+
+	int ret = 0;
+
 	/* Enforce interesting syscalls */
 	for(int sc = 0; sc < PPM_SC_MAX; sc++) {
-		syscall_id = scap_ppm_sc_to_native_id(sc);
+		const int syscall_id = scap_ppm_sc_to_native_id(sc);
 		/* if `syscall_id` is -1 this is not a syscall */
 		if(syscall_id == -1) {
 			continue;
@@ -1008,79 +1073,131 @@ static int enforce_sc_set(struct bpf_engine *handle) {
 		sched_prog_exec = true;
 	}
 
-	/* Enable desired tracepoints */
-	if(sys_enter)
+	if(sys_exit) {
+		sys_enter_connect = sc_set[PPM_SC_CONNECT];
+		sys_enter_creat = sc_set[PPM_SC_CREAT];
+		sys_enter_open = sc_set[PPM_SC_OPEN];
+		sys_enter_openat = sc_set[PPM_SC_OPENAT];
+		sys_enter_openat2 = sc_set[PPM_SC_OPENAT2];
+	}
+
+	/* Enable/disable desired tracepoints */
+
+	/* TOCTOU mitigation section.
+	 * Notice: attach tracepoints before the sys_exit dispatcher, because the tracepoint attachment
+	 * procedure generates an `openat` exit event on `/sys/kernel/tracing/events/.../id`, that would
+	 * pollute the stream of events read by our probe.
+	 */
+	if(sys_enter_connect)
 		ret = ret
-		              ?: attach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SYS_ENTER]),
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_CONNECT],
 		                                 handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SYS_ENTER]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_CONNECT]);
+
+	if(sys_enter_creat)
+		ret = ret
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_CREAT],
+		                                 handle->m_lasterr);
+	else
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_CREAT]);
+
+	if(sys_enter_open)
+		ret = ret
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_OPEN],
+		                                 handle->m_lasterr);
+	else
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_OPEN]);
+
+	if(sys_enter_openat2) {
+		ret = ret
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_OPENAT2],
+		                                 handle->m_lasterr);
+
+	}
+
+	else
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_OPENAT2]);
+
+	if(sys_enter_openat)
+		ret = ret
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_OPENAT],
+		                                 handle->m_lasterr);
+	else
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER_OPENAT]);
+
+	if(sys_enter)
+		ret = ret
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER],
+		                                 handle->m_lasterr);
+	else
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_ENTER]);
 
 	if(sys_exit)
 		ret = ret
-		              ?: attach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SYS_EXIT]),
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_EXIT],
 		                                 handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SYS_EXIT]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SYS_EXIT]);
 
 	if(sched_prog_fork_move_args)
 		ret = ret
 		              ?: attach_bpf_prog(
-		                         &(handle->m_attached_progs[BPF_PROG_SCHED_PROC_FORK_MOVE_ARGS]),
+		                         &handle->m_attached_progs[BPF_PROG_SCHED_PROC_FORK_MOVE_ARGS],
 		                         handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SCHED_PROC_FORK_MOVE_ARGS]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_FORK_MOVE_ARGS]);
 
 	if(sched_prog_fork_missing_child)
 		ret = ret
-		              ?: attach_bpf_prog(&(handle->m_attached_progs
-		                                           [BPF_PROG_SCHED_PROC_FORK_MISSING_CHILD]),
-		                                 handle->m_lasterr);
+		              ?: attach_bpf_prog(
+		                         &handle->m_attached_progs[BPF_PROG_SCHED_PROC_FORK_MISSING_CHILD],
+		                         handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SCHED_PROC_FORK_MISSING_CHILD]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_FORK_MISSING_CHILD]);
 
 	if(sched_prog_exec)
 		ret = ret
 		              ?: attach_bpf_prog(
-		                         &(handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXEC_MISSING_EXIT]),
+		                         &handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXEC_MISSING_EXIT],
 		                         handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXEC_MISSING_EXIT]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXEC_MISSING_EXIT]);
 
 	if(sc_set[PPM_SC_SCHED_PROCESS_EXIT])
 		ret = ret
-		              ?: attach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXIT]),
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXIT],
 		                                 handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXIT]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXIT]);
 
 	if(sc_set[PPM_SC_SCHED_SWITCH])
 		ret = ret
-		              ?: attach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SCHED_SWITCH]),
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SCHED_SWITCH],
 		                                 handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SCHED_SWITCH]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SCHED_SWITCH]);
 
 	if(sc_set[PPM_SC_PAGE_FAULT_USER])
 		ret = ret
-		              ?: attach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_PAGE_FAULT_USER]),
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_PAGE_FAULT_USER],
 		                                 handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_PAGE_FAULT_USER]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_PAGE_FAULT_USER]);
 
 	if(sc_set[PPM_SC_PAGE_FAULT_KERNEL])
 		ret = ret
-		              ?: attach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_PAGE_FAULT_KERNEL]),
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_PAGE_FAULT_KERNEL],
 		                                 handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_PAGE_FAULT_KERNEL]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_PAGE_FAULT_KERNEL]);
 
 	if(sc_set[PPM_SC_SIGNAL_DELIVER])
 		ret = ret
-		              ?: attach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SIGNAL_DELIVER]),
+		              ?: attach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SIGNAL_DELIVER],
 		                                 handle->m_lasterr);
 	else
-		detach_bpf_prog(&(handle->m_attached_progs[BPF_PROG_SIGNAL_DELIVER]));
+		detach_bpf_prog(&handle->m_attached_progs[BPF_PROG_SIGNAL_DELIVER]);
 
 	return ret;
 }
@@ -1321,7 +1438,8 @@ int32_t scap_bpf_close(struct scap_engine_handle engine) {
 		unload_bpf_prog(&handle->m_attached_progs[j]);
 	}
 
-	handle->m_bpf_prog_array_map_idx = -1;
+	handle->m_bpf_tail_call_map_idx = -1;
+	handle->m_bpf_ttm_tail_call_map_idx = -1;
 
 	if(handle->elf) {
 		elf_end(handle->elf);
@@ -1448,7 +1566,8 @@ int32_t scap_bpf_load(struct bpf_engine *handle, unsigned long buffer_bytes_dim)
 		return SCAP_FAILURE;
 	}
 
-	handle->m_bpf_prog_array_map_idx = -1;
+	handle->m_bpf_tail_call_map_idx = -1;
+	handle->m_bpf_ttm_tail_call_map_idx = -1;
 
 	if(load_bpf_file(handle) != SCAP_SUCCESS) {
 		return SCAP_FAILURE;

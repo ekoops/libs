@@ -45,7 +45,8 @@ struct bpf_engine {
 	bpf_attached_prog m_attached_progs[BPF_PROG_ATTACHED_MAX];
 
 	int m_bpf_map_fds[BPF_MAPS_MAX];
-	int m_bpf_prog_array_map_idx;
+	int m_bpf_tail_call_map_idx;     /* Fillers prog array map index. */
+	int m_bpf_ttm_tail_call_map_idx; /* TOCTOU mitigation fillers prog array map index. */
 	char m_filepath[SCAP_MAX_PATH_SIZE];
 
 	/* ELF related */

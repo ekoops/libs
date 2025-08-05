@@ -25,6 +25,7 @@ or GPL2.txt for full copies of the license.
 #include "filler_helpers.h"
 #include "fillers.h"
 #include "builtins.h"
+#include "toctou_mitigation.h"
 
 #define __NR_ia32_socketcall 102
 
@@ -108,6 +109,29 @@ BPF_PROBE("raw_syscalls/", sys_enter, sys_enter_args) {
 			evt_type = PPME_GENERIC_E;
 			drop_flags = UF_ALWAYS_DROP;
 		}
+	}
+
+	// The following system calls are already handled by TOCTOU mitigation fillers and will not
+	// have an entry in the tail map, so simply return early, avoiding wasting resources on any
+	// additional filtering logic.
+	switch(id) {
+#if defined(__NR_connect) || defined(__NR_creat) || defined(__NR_open) || defined(__NR_openat)
+#ifdef __NR_connect
+	case __NR_connect:
+#endif  // __NR_connect
+#ifdef __NR_creat
+	case __NR_creat:
+#endif  // __NR_creat
+#ifdef __NR_open
+	case __NR_open:
+#endif  // __NR_open
+#ifdef __NR_openat
+	case __NR_openat:
+#endif  // __NR_openat
+		return 0;
+#endif  // __NR_connect ||__NR_creat || __NR_open || __NR_openat
+	default:
+		break;
 	}
 
 #ifdef BPF_SUPPORTS_RAW_TRACEPOINTS

@@ -35,7 +35,12 @@ typedef enum {
 	              Only when we have raw_tp */
 	BPF_PROG_SCHED_PROC_EXEC_MISSING_EXIT = 9, /* This is only used on architectures where the
 	                                              execve/execveat success event is missing */
-	BPF_PROG_ATTACHED_MAX = 10,
+	BPF_PROG_SYS_ENTER_CONNECT = 10, /* connect syscall TOCTOU mitigation sys_enter program. */
+	BPF_PROG_SYS_ENTER_CREAT = 11,   /* creat syscall TOCTOU mitigation sys_enter program. */
+	BPF_PROG_SYS_ENTER_OPEN = 12,    /* open syscall TOCTOU mitigation sys_enter program. */
+	BPF_PROG_SYS_ENTER_OPENAT = 13,  /* openat syscall TOCTOU mitigation sys_enter program. */
+	BPF_PROG_SYS_ENTER_OPENAT2 = 14, /* openat2 syscall TOCTOU mitigation sys_enter program. */
+	BPF_PROG_ATTACHED_MAX = 15,
 } bpf_attached_prog_codes;
 
 typedef struct bpf_attached_prog {
@@ -55,6 +60,11 @@ bool is_signal_deliver(const char* name);
 bool is_sched_prog_fork_move_args(const char* name);
 bool is_sched_prog_fork_missing_child(const char* name);
 bool is_sched_prog_exec_missing_exit(const char* name);
+bool is_sys_enter_connect(const char* name);
+bool is_sys_enter_creat(const char* name);
+bool is_sys_enter_open(const char* name);
+bool is_sys_enter_openat(const char* name);
+bool is_sys_enter_openat2(const char* name);
 
 void fill_attached_prog_info(struct bpf_attached_prog* prog, bool raw_tp, const char* name, int fd);
 int attach_bpf_prog(struct bpf_attached_prog* prog, char* last_err);
