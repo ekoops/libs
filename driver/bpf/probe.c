@@ -25,6 +25,7 @@ or GPL2.txt for full copies of the license.
 #include "filler_helpers.h"
 #include "fillers.h"
 #include "builtins.h"
+#include "toctou_mitigation.h"
 
 #define __NR_ia32_socketcall 102
 
