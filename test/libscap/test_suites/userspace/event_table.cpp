@@ -194,23 +194,33 @@ TEST(event_table, check_exit_param_names) {
 // TODO(ekoops): revisit this test after we remove the enter event support in sinsp
 TEST(event_table, check_EF_USED_FD) {
 	for(int evt = 0; evt < PPM_EVENT_MAX; evt++) {
-		auto evt_info = scap_get_event_info_table()[evt];
+		const auto evt_info = scap_get_event_info_table()[evt];
 		if((evt_info.flags & EF_USES_FD) == 0) {
 			continue;
 		}
 
 		if(PPME_IS_ENTER(evt)) {
-			const int location = get_enter_event_fd_location((ppm_event_code)evt);
+			const int location = get_enter_event_fd_location(static_cast<ppm_event_code>(evt));
 			ASSERT_EQ(evt_info.params[location].type, PT_FD)
 			        << "event_type " << evt << " uses a wrong location " << location;
 		}
 
 		if(PPME_IS_EXIT(evt) && evt_info.flags & EF_TMP_CONVERTER_MANAGED) {
-			const int location = get_exit_event_fd_location((ppm_event_code)evt);
-			ASSERT_NE(location, -1)
-			        << "event_type " << evt << " uses a wrong location " << location;
-			ASSERT_EQ(evt_info.params[location].type, PT_FD)
-			        << "event_type " << evt << " uses a wrong location " << location;
+			const int location = get_exit_event_fd_location(static_cast<ppm_event_code>(evt));
+			// In practice, get_exit_event_fd_location() returns -1 for all old event versions as we
+			// are making that assumption that events of these types are not propagated by scap.
+			// In the future, if there would be the need of this kind of information, we can modify
+			// the get_exit_event_fd_location() to include the old event versions fd positions, and
+			// update this test accordingly.
+			if(evt_info.flags & EF_OLD_VERSION) {
+				ASSERT_EQ(location, -1)
+				        << "event_type " << evt << " uses a wrong location " << location;
+			} else {
+				ASSERT_NE(location, -1)
+				        << "event_type " << evt << " uses a wrong location " << location;
+				ASSERT_EQ(evt_info.params[location].type, PT_FD)
+				        << "event_type " << evt << " uses a wrong location " << location;
+			}
 		}
 	}
 }
