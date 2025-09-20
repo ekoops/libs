@@ -1008,6 +1008,11 @@ const std::unordered_map<conversion_key, conversion_info> g_conversion_table = {
         {conversion_key{PPME_SYSCALL_ACCESS_E, 1}, conversion_info().action(C_ACTION_STORE)},
         {conversion_key{PPME_SYSCALL_ACCESS_X, 2},
          conversion_info().action(C_ACTION_ADD_PARAMS).instrs({{C_INSTR_FROM_ENTER, 0}})},
+        /*====================== CONTAINER ======================*/
+        {conversion_key{PPME_CONTAINER_JSON_E, 1},
+         conversion_info().desired_type(PPME_CONTAINER_JSON_2_E).action(C_ACTION_CHANGE_TYPE)},
+        {conversion_key{PPME_CONTAINER_JSON_2_X, 1},
+         conversion_info().desired_type(PPME_CONTAINER_JSON_2_X).action(C_ACTION_CHANGE_TYPE)},
         /*====================== SETGID ======================*/
         {conversion_key{PPME_SYSCALL_SETGID_E, 1}, conversion_info().action(C_ACTION_STORE)},
         {conversion_key{PPME_SYSCALL_SETGID_X, 1},
