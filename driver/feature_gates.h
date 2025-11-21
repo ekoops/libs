@@ -92,7 +92,7 @@ or GPL2.txt for full copies of the license.
  * been introduced in the following kernel release:
  * https://github.com/torvalds/linux/commit/4ff16c25e2cc48cbe6956e356c38a25ac063a64d
  */
-#if defined(CONFIG_ARM64)
+#if(LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0))
 #define CAPTURE_SCHED_PROC_EXEC
 #endif
 
@@ -148,9 +148,7 @@ or GPL2.txt for full copies of the license.
 // CAPTURE_SCHED_PROC_EXEC
 ///////////////////////////////
 
-#if defined(__TARGET_ARCH_arm64)
 #define CAPTURE_SCHED_PROC_EXEC
-#endif
 
 ///////////////////////////////
 // CAPTURE_SCHED_PROC_FORK
@@ -215,9 +213,9 @@ or GPL2.txt for full copies of the license.
 // CAPTURE_SCHED_PROC_EXEC
 ///////////////////////////////
 
-#if defined(__aarch64__)
+// #if(LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0))
 #define CAPTURE_SCHED_PROC_EXEC
-#endif
+// #endif
 
 #endif /* __KERNEL__ */
 

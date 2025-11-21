@@ -227,6 +227,7 @@ static __always_inline uint16_t push__charbuf(uint8_t *data,
 	}
 
 	if(written_bytes < 0) {
+		bpf_printk("push__charbuf failed: err = %d\n", written_bytes);
 		/* This is probably a page fault */
 		return 0;
 	}

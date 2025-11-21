@@ -47,6 +47,8 @@ struct {
 /* chose a short name for bpftool debugging*/
 SEC("tp_btf/sched_process_exec")
 int BPF_PROG(sched_p_exec, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm) {
+	unsigned long filename_pointer = (unsigned long)BPF_CORE_READ(bprm, filename);
+	bpf_printk("sched_p_exec (1): filename = %s\n", filename_pointer);
 	struct task_struct *task = get_current_task();
 	uint32_t flags = 0;
 	READ_TASK_FIELD_INTO(&flags, task, flags);
@@ -151,6 +153,8 @@ int BPF_PROG(sched_p_exec, struct task_struct *p, pid_t old_pid, struct linux_bi
 
 SEC("tp_btf/sched_process_exec")
 int BPF_PROG(t1_sched_p_exec, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm) {
+	unsigned long filename_pointer = (unsigned long)BPF_CORE_READ(bprm, filename);
+	bpf_printk("sched_p_exec (2): filename = %s\n", filename_pointer);
 	struct auxiliary_map *auxmap = auxmap__get();
 	if(!auxmap) {
 		return 0;
@@ -270,7 +274,9 @@ int BPF_PROG(t1_sched_p_exec, struct task_struct *p, pid_t old_pid, struct linux
 }
 
 SEC("tp_btf/sched_process_exec")
-int BPF_PROG(t2_sched_p_exec, struct pt_regs *regs, long ret) {
+int BPF_PROG(t2_sched_p_exec, struct pt_regs *regs, long ret, struct linux_binprm *bprm) {
+	unsigned long filename_pointer1 = (unsigned long)BPF_CORE_READ(bprm, filename);
+	bpf_printk("sched_p_exec (3): filename = %s\n", filename_pointer1);
 	struct auxiliary_map *auxmap = auxmap__get();
 	if(!auxmap) {
 		return 0;
@@ -295,6 +301,22 @@ int BPF_PROG(t2_sched_p_exec, struct pt_regs *regs, long ret) {
 	uint32_t egid;
 	extract__egid(task, &egid);
 	auxmap__store_u32_param(auxmap, egid);
+
+	/* Parameter 31: filename (type: PT_FSPATH) */
+	/* note: in the current implementation, this program is called for both execve and execveat, and
+	 * always generates an execve event. We use `bprm->filename` to populate the `filename`
+	 * parameter. `bprm->filename` contains a different thing, depending on the original system call
+	 * type and arguments provided by the user (see
+	 * https://elixir.bootlin.com/linux/v6.17.8/source/fs/exec.c#L1422-L1448).
+	 * At least for execve, it contains the system call's first argument, as provided by the user.
+	 */
+	unsigned long filename_pointer = (unsigned long)BPF_CORE_READ(bprm, filename);
+	if(!filename_pointer) {
+		auxmap__store_empty_param(auxmap);
+	} else {
+		auxmap__store_charbuf_param(auxmap, filename_pointer, MAX_PATH, KERNEL);
+	}
+	bpf_printk("sched_p_exec (4): filename = %s\n", filename_pointer);
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 

@@ -137,9 +137,12 @@ TEST(GenericTracepoints, sched_proc_exec) {
 	/* Parameter 28: trusted_exepath (type: PT_FSPATH) */
 	evt_test->assert_charbuf_param(28, pathname);
 
+	/* Parameter 31: filename (type: PT_FSPATH) */
+	evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 
 #if defined(__NR_memfd_create) && defined(__NR_openat) && defined(__NR_read) && defined(__NR_write)
@@ -186,9 +189,9 @@ TEST(GenericTracepoints, sched_proc_exec_success_memfd) {
 	cl_args.exit_signal = SIGCHLD;
 	pid_t ret_pid = syscall(__NR_clone3, &cl_args, sizeof(cl_args));
 
+	char pathname[200];
+	snprintf(pathname, sizeof(pathname), "/proc/%d/fd/%d", getpid(), mem_fd);
 	if(ret_pid == 0) {
-		char pathname[200];
-		snprintf(pathname, sizeof(pathname), "/proc/%d/fd/%d", getpid(), mem_fd);
 		const char *newargv[] = {pathname, "[OUTPUT] SyscallExit.execveX_success_memfd", NULL};
 		const char *newenviron[] = {"IN_TEST=yes", "3_ARGUMENT=yes", "2_ARGUMENT=no", NULL};
 		syscall(__NR_execve, pathname, newargv, newenviron);
@@ -249,9 +252,13 @@ TEST(GenericTracepoints, sched_proc_exec_success_memfd) {
 		evt_test->assert_charbuf_param(28, "memfd:malware");
 	}
 
+	/* Parameter 31: filename (type: PT_FSPATH) */
+	// todo(ekoops): fix the value returned here.
+	// evt_test->assert_charbuf_param(31, pathname);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(30);
+	evt_test->assert_num_params_pushed(31);
 }
 #endif
 #endif

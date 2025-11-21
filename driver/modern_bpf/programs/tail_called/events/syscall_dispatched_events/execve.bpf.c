@@ -12,6 +12,8 @@
 
 SEC("tp_btf/sys_exit")
 int BPF_PROG(execve_x, struct pt_regs *regs, long ret) {
+//	auxmap__store_charbuf_param(auxmap, filename_pointer, MAX_PATH, USER);
+
 /* On some recent kernels the execve/execveat issue is solved:
  * https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/commit/?h=linux-5.15.y&id=42eede3ae05bbf32cb0d87940b466ec5a76aca3f
  * BTW we already catch the event with our `sched_process_exec` tracepoint, for this reason we don't
@@ -23,6 +25,8 @@ int BPF_PROG(execve_x, struct pt_regs *regs, long ret) {
 		return 0;
 	}
 #endif
+	unsigned long filename_pointer = extract__syscall_argument(regs, 0);
+	bpf_printk("execve_x (1): filename = %s\n", (char *)filename_pointer);
 
 	struct auxiliary_map *auxmap = auxmap__get();
 	if(!auxmap) {
@@ -288,6 +292,11 @@ int BPF_PROG(t2_execve_x, struct pt_regs *regs, long ret) {
 	uint32_t egid;
 	extract__egid(task, &egid);
 	auxmap__store_u32_param(auxmap, egid);
+
+	/* Parameter 31: filename (type: PT_FSPATH) */
+	unsigned long filename_pointer = extract__syscall_argument(regs, 0);
+	bpf_printk("execve_x (2): filename = %s\n", (char *)filename_pointer);
+	auxmap__store_charbuf_param(auxmap, filename_pointer, MAX_PATH, USER);
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 

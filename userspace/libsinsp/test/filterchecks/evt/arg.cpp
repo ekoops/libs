@@ -92,4 +92,5 @@ TEST_F(sinsp_with_test_input, EVT_FILTER_arg_empty_params) {
 	ASSERT_EQ(get_field_as_string(evt, "evt.arg.trusted_exepath"), "<NA>");  // PT_FSPATH
 	ASSERT_EQ(get_field_as_string(evt, "evt.arg.pgid"), "<NA>");             // PT_PID
 	ASSERT_EQ(get_field_as_string(evt, "evt.arg.gid"), "<NA>");              // PT_GID
+	ASSERT_EQ(get_field_as_string(evt, "evt.arg.gid"), "<NA>");              // PT_GID
 }

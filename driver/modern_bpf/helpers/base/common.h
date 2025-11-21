@@ -28,7 +28,6 @@
  * Starting from 5.9 bpf_trace_printk() always appends newline at the end.
  */
 #undef bpf_printk
-#ifdef __MODERN_BPF_DEBUG__
 #define bpf_printk(fmt, ...)                                                \
 	({                                                                      \
 		static char ____fmt[] = fmt "\0";                                   \
@@ -39,8 +38,5 @@
 			bpf_trace_printk(____fmt, sizeof(____fmt), ##__VA_ARGS__);      \
 		}                                                                   \
 	})
-#else
-#define bpf_printk(fmt, ...)
-#endif
 
 /*=============================== DEBUG MACRO ===========================*/

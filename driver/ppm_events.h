@@ -20,6 +20,10 @@ or GPL2.txt for full copies of the license.
 
 #include "ppm_events_public.h"
 
+#ifdef CAPTURE_SCHED_PROC_EXEC
+#include <linux/binfmts.h>  // `struct linux_binprm` definition.
+#endif
+
 /*
  * Various crap that a callback might need
  */
@@ -55,6 +59,9 @@ struct event_filler_arguments {
 
 #ifdef CAPTURE_SCHED_PROC_FORK
 	struct task_struct *child; /* for sched_process_fork events, this is the child task */
+#endif
+#ifdef CAPTURE_SCHED_PROC_EXEC
+	struct linux_binprm *sched_proc_exec_bprm; /* Only meaningful for sched_process_exec events. */
 #endif
 
 	char *str_storage; /* String storage. Size is one page. */
