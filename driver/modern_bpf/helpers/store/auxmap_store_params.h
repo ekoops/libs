@@ -68,6 +68,10 @@ static __always_inline struct auxiliary_map *auxmap__get() {
 	return maps__get_auxiliary_map();
 }
 
+static __always_inline struct auxiliary_map *auxmap_iter__get() {
+	return maps__get_iter_auxiliary_map();
+}
+
 /////////////////////////////////
 // STORE EVENT HEADER INTO THE AUXILIARY MAP
 ////////////////////////////////
@@ -90,6 +94,33 @@ static __always_inline void auxmap__preload_event_header(struct auxiliary_map *a
 	uint8_t nparams = maps__get_event_num_params(event_type);
 	hdr->ts = maps__get_boot_time() + bpf_ktime_get_boot_ns();
 	hdr->tid = bpf_get_current_pid_tgid() & 0xffffffff;
+	hdr->type = event_type;
+	hdr->nparams = nparams;
+	auxmap->payload_pos = sizeof(struct ppm_evt_hdr) + nparams * sizeof(uint16_t);
+	auxmap->lengths_pos = sizeof(struct ppm_evt_hdr);
+	auxmap->event_type = event_type;
+}
+
+/**
+ * @brief Push the iterator event header inside the auxiliary map.
+ *
+ * Please note: we call this method `preload` since we cannot completely fill the event header. When
+ * we call this method we don't know yet the overall size of the event, we discover it only at the
+ * end of the collection phase. We have to use the `auxmap__finalize_event_header` to "finalize" the
+ * header, inserting also the total event length.
+ *
+ * @param auxmap pointer to the auxmap in which we are writing our iterator event header.
+ * @param pid This is the thread id (what is called pid in kernel, not the tgid) of the iterator
+ *			  event that we are writing into the map.
+ * @param event_type This is the type of the iterator event that we are writing into the map.
+ */
+static __always_inline void auxmap_iter__preload_event_header(struct auxiliary_map *auxmap,
+                                                              uint32_t pid,
+                                                              uint16_t event_type) {
+	struct ppm_evt_hdr *hdr = (struct ppm_evt_hdr *)auxmap->data;
+	uint8_t nparams = maps__get_event_num_params(event_type);
+	hdr->ts = maps__get_boot_time() + bpf_ktime_get_boot_ns();
+	hdr->tid = (uint64_t)pid;
 	hdr->type = event_type;
 	hdr->nparams = nparams;
 	auxmap->payload_pos = sizeof(struct ppm_evt_hdr) + nparams * sizeof(uint16_t);
@@ -149,6 +180,27 @@ static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap) {
 		counter->n_drops_buffer++;
 		compute_event_types_stats(auxmap->event_type, counter);
 	}
+}
+
+/////////////////////////////////
+// COPY EVENT FROM AUXMAP TO SEQ FILE
+////////////////////////////////
+
+/**
+ * @brief Copy the entire event from the auxiliary map to the seq file.
+ * If the event is correctly copied in the ringbuf we increment the number
+ * of events sent to userspace, otherwise we increment the dropped events.
+ *
+ * @param auxmap pointer to the auxmap in which we have already written the entire event.
+ */
+static __always_inline void auxmap_iter__submit_event(struct auxiliary_map *auxmap,
+                                                      struct seq_file *seq) {
+	if(auxmap->payload_pos > MAX_EVENT_SIZE) {
+		return;
+	}
+	// todo(ekoops): implement counter machanism to account for the event sent.
+	// todo(ekoops): handle possible errors.
+	bpf_seq_write(seq, auxmap->data, auxmap->payload_pos);
 }
 
 /////////////////////////////////

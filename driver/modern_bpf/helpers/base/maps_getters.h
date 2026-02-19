@@ -190,6 +190,15 @@ static __always_inline struct auxiliary_map *maps__get_auxiliary_map() {
 
 /*=============================== AUXILIARY MAPS ===========================*/
 
+/*=============================== ITER AUXILIARY MAPS ===========================*/
+
+static __always_inline struct auxiliary_map *maps__get_iter_auxiliary_map() {
+	uint32_t cpu_id = (uint32_t)bpf_get_smp_processor_id();
+	return (struct auxiliary_map *)bpf_map_lookup_elem(&iter_auxiliary_maps, &cpu_id);
+}
+
+/*=============================== AUXILIARY MAPS ===========================*/
+
 /*=============================== COUNTER MAPS ===========================*/
 
 static __always_inline struct counter_map *maps__get_counter_map() {

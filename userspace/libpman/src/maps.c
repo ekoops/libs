@@ -385,6 +385,15 @@ static int size_auxiliary_maps() {
 	return 0;
 }
 
+static int size_iter_auxiliary_maps() {
+	/* We always allocate auxiliary maps from all the CPUs, even if some of them are not online. */
+	if(bpf_map__set_max_entries(g_state.skel->maps.iter_auxiliary_maps, g_state.n_possible_cpus)) {
+		pman_print_error("unable to set max entries for 'iter_auxiliary_maps'");
+		return errno;
+	}
+	return 0;
+}
+
 static int size_counter_maps() {
 	/* We always allocate counter maps from all the CPUs, even if some of them are not online. */
 	if(bpf_map__set_max_entries(g_state.skel->maps.counter_maps, g_state.n_possible_cpus)) {
@@ -412,6 +421,7 @@ int pman_prepare_maps_before_loading() {
 	 * The number of entries will be always equal to the CPUs number.
 	 */
 	err = size_auxiliary_maps();
+	err = size_iter_auxiliary_maps();
 	err = err ?: size_counter_maps();
 	return err;
 }

@@ -200,3 +200,8 @@ ttm_progs_t ttm_progs_table[TTM_MAX] = {
                          {{"ia32_compat_openat2_e", "__ia32_compat_sys_openat2"},
                           {"ia32_openat2_e", "__ia32_sys_openat2"}}},
 };
+
+iter_prog_t iter_progs_table[ITER_PROG_MAX] = {
+        [ITER_PROG_TASK] = {"dump_task", "task_file"},
+        [ITER_PROG_TASK_FILE] = {"dump_task_file", "task_file"},
+};

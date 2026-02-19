@@ -58,3 +58,15 @@ enum ttm_sc_code { TTM_CONNECT, TTM_CREAT, TTM_OPEN, TTM_OPENAT, TTM_OPENAT2, TT
 
 // Defined in events_prog_table.c
 extern ttm_progs_t ttm_progs_table[TTM_MAX];
+
+typedef struct {
+	// The eBPF program name.
+	char *name;
+	// Kernel symbol name without `bpf_iter_` prefix (e.g.: `task`, not `bpf_iter_task`).
+	char *kernel_symbol_suffix;
+} iter_prog_t;
+
+enum iter_prog_code { ITER_PROG_TASK, ITER_PROG_TASK_FILE, ITER_PROG_MAX };
+
+// Defined in events_prog_table.c
+extern iter_prog_t iter_progs_table[ITER_PROG_MAX];

@@ -155,6 +155,17 @@ struct {
 } auxiliary_maps __weak SEC(".maps");
 
 /**
+ * @brief For every CPU on the system we have an iterator auxiliary
+ * map where the event is temporally saved before being
+ * pushed in the ringbuffer.
+ */
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__type(key, uint32_t);
+	__type(value, struct auxiliary_map);
+} iter_auxiliary_maps __weak SEC(".maps");
+
+/**
  * @brief For every CPU on the system we have a counter
  * map where we store the number of events correctly pushed
  * and the number of events dropped.

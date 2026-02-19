@@ -307,6 +307,13 @@ int pman_attach_openat2_toctou_mitigation_progs(void);
 int pman_detach_openat2_toctou_mitigation_progs(void);
 
 /////////////////////////////
+// ITERATORS
+/////////////////////////////
+
+int pman_iter_get_threads(int pid_filter, void* error);
+int pman_iter_get_files(int pid_filter, void* error);
+
+/////////////////////////////
 // MANAGE RINGBUFFERS
 /////////////////////////////
 
