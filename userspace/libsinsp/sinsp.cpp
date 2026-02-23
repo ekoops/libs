@@ -726,10 +726,25 @@ void sinsp::open_modern_bpf(unsigned long driver_buffer_bytes_dim,
 	                                                     ::on_proc_table_refresh_end,
 	                                                     ::on_new_entry_from_proc,
 	                                                     this});
+	if(platform) {
+		auto linux_plat = (scap_linux_platform*)platform;
+		linux_plat->m_linux_vtable = &scap_modern_bpf_linux_vtable;
+	}
+
 	try_open_common(&oargs, &scap_modern_bpf_engine, platform, SINSP_MODE_LIVE);
 #else
 	throw sinsp_exception("MODERN_BPF engine is not supported in this build");
 #endif
+}
+
+void sinsp::get_threads(const int tid_filter) const {
+	auto* platform = reinterpret_cast<struct scap_linux_platform*>(m_platform);
+	platform->m_linux_vtable->get_threads(m_h->m_engine, tid_filter, nullptr);
+}
+
+void sinsp::get_files(const int pid_filter, const int fd_filter) const {
+	auto* platform = reinterpret_cast<struct scap_linux_platform*>(m_platform);
+	platform->m_linux_vtable->get_files(m_h->m_engine, pid_filter, fd_filter, nullptr);
 }
 
 void sinsp::open_test_input(scap_test_input_data* data, sinsp_mode_t mode) {

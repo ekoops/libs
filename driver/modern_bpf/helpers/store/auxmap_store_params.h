@@ -8,10 +8,13 @@
 
 #pragma once
 
+#include "test/drivers/event_class/network_utils.h"
+
 #include <helpers/base/shared_size.h>
 #include <helpers/base/push_data.h>
 #include <helpers/extract/extract_from_kernel.h>
 #include <helpers/base/stats.h>
+#include <linux/stddef.h>
 
 /* Concept of auxamp (auxiliary map):
  *
@@ -68,6 +71,10 @@ static __always_inline struct auxiliary_map *auxmap__get() {
 	return maps__get_auxiliary_map();
 }
 
+static __always_inline struct auxiliary_map *auxmap_iter__get() {
+	return maps__get_iter_auxiliary_map();
+}
+
 /////////////////////////////////
 // STORE EVENT HEADER INTO THE AUXILIARY MAP
 ////////////////////////////////
@@ -90,6 +97,33 @@ static __always_inline void auxmap__preload_event_header(struct auxiliary_map *a
 	uint8_t nparams = maps__get_event_num_params(event_type);
 	hdr->ts = maps__get_boot_time() + bpf_ktime_get_boot_ns();
 	hdr->tid = bpf_get_current_pid_tgid() & 0xffffffff;
+	hdr->type = event_type;
+	hdr->nparams = nparams;
+	auxmap->payload_pos = sizeof(struct ppm_evt_hdr) + nparams * sizeof(uint16_t);
+	auxmap->lengths_pos = sizeof(struct ppm_evt_hdr);
+	auxmap->event_type = event_type;
+}
+
+/**
+ * @brief Push the iterator event header inside the auxiliary map.
+ *
+ * Please note: we call this method `preload` since we cannot completely fill the event header. When
+ * we call this method we don't know yet the overall size of the event, we discover it only at the
+ * end of the collection phase. We have to use the `auxmap__finalize_event_header` to "finalize" the
+ * header, inserting also the total event length.
+ *
+ * @param auxmap pointer to the auxmap in which we are writing our iterator event header.
+ * @param pid This is the thread id (what is called pid in kernel, not the tgid) of the iterator
+ *			  event that we are writing into the map.
+ * @param event_type This is the type of the iterator event that we are writing into the map.
+ */
+static __always_inline void auxmap_iter__preload_event_header(struct auxiliary_map *auxmap,
+                                                              uint32_t pid,
+                                                              uint16_t event_type) {
+	struct ppm_evt_hdr *hdr = (struct ppm_evt_hdr *)auxmap->data;
+	uint8_t nparams = maps__get_event_num_params(event_type);
+	hdr->ts = maps__get_boot_time() + bpf_ktime_get_boot_ns();
+	hdr->tid = (uint64_t)pid;
 	hdr->type = event_type;
 	hdr->nparams = nparams;
 	auxmap->payload_pos = sizeof(struct ppm_evt_hdr) + nparams * sizeof(uint16_t);
@@ -149,6 +183,27 @@ static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap) {
 		counter->n_drops_buffer++;
 		compute_event_types_stats(auxmap->event_type, counter);
 	}
+}
+
+/////////////////////////////////
+// COPY EVENT FROM AUXMAP TO SEQ FILE
+////////////////////////////////
+
+/**
+ * @brief Copy the entire event from the auxiliary map to the seq file.
+ * If the event is correctly copied in the ringbuf we increment the number
+ * of events sent to userspace, otherwise we increment the dropped events.
+ *
+ * @param auxmap pointer to the auxmap in which we have already written the entire event.
+ */
+static __always_inline void auxmap_iter__submit_event(struct auxiliary_map *auxmap,
+                                                      struct seq_file *seq) {
+	if(auxmap->payload_pos > MAX_EVENT_SIZE) {
+		return;
+	}
+	// todo(ekoops): implement counter machanism to account for the event sent.
+	// todo(ekoops): handle possible errors.
+	bpf_seq_write(seq, auxmap->data, auxmap->payload_pos);
 }
 
 /////////////////////////////////
@@ -224,6 +279,7 @@ static __always_inline void auxmap__store_u8_param(struct auxiliary_map *auxmap,
  * @brief This helper should be used to store unsigned 16 bit params.
  * The following types are compatible with this helper:
  * - PT_UINT16
+ * - PT_PORT
  *
  * @param auxmap pointer to the auxmap in which we are storing the param.
  * @param param param to store
@@ -243,6 +299,7 @@ static __always_inline void auxmap__store_u16_param(struct auxiliary_map *auxmap
  * - PT_MODE
  * - PT_FLAGS32
  * - PT_ENUMFLAGS32
+ * - PT_IPV4ADDR
  *
  * @param auxmap pointer to the auxmap in which we are storing the param.
  * @param param param to store
@@ -265,6 +322,20 @@ static __always_inline void auxmap__store_u32_param(struct auxiliary_map *auxmap
 static __always_inline void auxmap__store_u64_param(struct auxiliary_map *auxmap, uint64_t param) {
 	push__u64(auxmap->data, &auxmap->payload_pos, param);
 	push__param_len(auxmap->data, &auxmap->lengths_pos, sizeof(uint64_t));
+}
+
+/**
+ * @brief This helper should be used to store IPv6 address params.
+ * The following types are compatible with this helper:
+ * - PT_IPV6ADDR
+ *
+ * @param auxmap pointer to the auxmap in which we are storing the param.
+ * @param addr IPv6 address to store
+ */
+static __always_inline void auxmap__store_ipv6_addr_param(struct auxiliary_map *auxmap,
+                                                          uint32_t addr[4]) {
+	push__ipv6(auxmap->data, &auxmap->payload_pos, addr);
+	push__param_len(auxmap->data, &auxmap->lengths_pos, IPV6_SIZE);
 }
 
 /**
@@ -337,6 +408,41 @@ static __always_inline uint16_t auxmap__store_bytebuf_param(struct auxiliary_map
 }
 
 /**
+ * NOTE: this helper relies on specific features and doesn't implement any fallback mechanism for
+ * them. See `push__user_task_bytebuf()` for more information.
+ *
+ * @brief This helper stores the bytebuf pointed by `bytebuf_pointer` into the auxmap.
+ * `bytebuf_pointer` must be a pointer in the user space memory of the provided task. The bytebuf
+ * has a fixed len `len_to_read`. If we are not able to read exactly `len_to_read` bytes we will
+ * push an empty param in the map, so param_len=0.
+ *
+ * @param auxmap pointer to the auxmap in which we are storing the param.
+ * @param bytebuf_pointer pointer to the bytebuf in the user space memory of `task`.
+ * @param len_to_read bytes that we need to read from the pointer.
+ * @param task task from which user space memory we need to read.
+ * @return number of bytes read.
+ */
+static __always_inline uint16_t auxmap__store_user_task_bytebuf_param(struct auxiliary_map *auxmap,
+                                                                      unsigned long bytebuf_pointer,
+                                                                      uint16_t len_to_read,
+                                                                      struct task_struct *task) {
+	uint16_t bytebuf_len = 0;
+	/* This check is just for performance reasons. */
+	if(bytebuf_pointer && len_to_read > 0) {
+		bytebuf_len = push__user_task_bytebuf(auxmap->data,
+		                                      &auxmap->payload_pos,
+		                                      bytebuf_pointer,
+		                                      len_to_read,
+		                                      task);
+	}
+	/* If we are not able to push anything with `push__user_task_bytebuf`. `bytebuf_len` will be
+	 * equal to `0` so we will send an empty param to userspace.
+	 */
+	push__param_len(auxmap->data, &auxmap->lengths_pos, bytebuf_len);
+	return bytebuf_len;
+}
+
+/**
  * @brief This helper stores a char buffer array as a byte buffer into the auxmap.
  *
  * @param auxmap pointer to the auxmap in which we are storing the param.
@@ -363,6 +469,42 @@ static __always_inline void auxmap__store_charbufarray_as_bytebuf(struct auxilia
 	 * we don't need the final `\0`.
 	 */
 	if(auxmap__store_bytebuf_param(auxmap, start_pointer, len_to_read, USER) > 0) {
+		// maybe we read only part of the last argument so we need to put a `\0` at the end.
+		push__previous_character(auxmap->data, &auxmap->payload_pos, '\0');
+	}
+}
+
+/**
+ * NOTE: this helper relies on specific features and doesn't implement any fallback mechanism for
+ * them. See `auxmap__store_user_task_bytebuf_param()` for more information.
+ *
+ * @brief This helper stores a char buffer array from the user memory of the provided task into the
+ * auxmap.
+ *
+ * @param auxmap pointer to the auxmap in which we are storing the param.
+ * @param start_pointer pointer where we start to read.
+ * @param len_to_read len that we can ideally read.
+ * @param max_len max len that we can read.
+ * @param task task from which user space memory we need to read.
+ */
+static __always_inline void auxmap__store_user_task_charbufarray_param(struct auxiliary_map *auxmap,
+                                                                       unsigned long start_pointer,
+                                                                       uint16_t len_to_read,
+                                                                       uint16_t max_len,
+                                                                       struct task_struct *task) {
+	/* Here we read an array of charbufs starting from a pointer. We could also read the array
+	 * element per element but since we know the total len we read it as a `bytebuf`. Since this is
+	 * an array of charbufs, the `\0` after every argument are preserved. We just need to add a
+	 * final `\0` in case data are too long and we have a partial read.
+	 */
+	if(len_to_read >= max_len) {
+		len_to_read = max_len;
+	}
+
+	/* if `auxmap__store_user_task_bytebuf_param()` returns 0 we will send an empty param. We don't
+	 * need the final `\0`.
+	 */
+	if(auxmap__store_user_task_bytebuf_param(auxmap, start_pointer, len_to_read, task) > 0) {
 		// maybe we read only part of the last argument so we need to put a `\0` at the end.
 		push__previous_character(auxmap->data, &auxmap->payload_pos, '\0');
 	}

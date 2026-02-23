@@ -800,6 +800,9 @@ public:
 
 	inline uint32_t get_num_cpus() const { return m_num_cpus; }
 
+	void get_threads(int tid_filter) const;
+	void get_files(int pid_filter, int fd_filter) const;
+
 private:
 	void set_input_plugin(const std::string& name, const std::string& params);
 	// Wrapper around `open_common()` handling resource clean up upon failure (exceptions).

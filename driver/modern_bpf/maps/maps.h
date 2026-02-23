@@ -76,6 +76,13 @@ __weak bool is_dropping;
  */
 __weak void *socket_file_ops = NULL;
 
+/**
+ * @brief An integer used by the `dump_task_files` BPF iterator program which specific file to dump
+ * based on its file descriptor. If set to -1, the filter-by-fd logic is not applied.
+ */
+
+__weak int64_t dump_task_file_fd_filter = -1;
+
 /*=============================== BPF GLOBAL VARIABLES ===============================*/
 
 /*=============================== BPF_MAP_TYPE_PROG_ARRAY ===============================*/
@@ -153,6 +160,17 @@ struct {
 	__type(key, uint32_t);
 	__type(value, struct auxiliary_map);
 } auxiliary_maps __weak SEC(".maps");
+
+/**
+ * @brief For every CPU on the system we have an iterator auxiliary
+ * map where the event is temporally saved before being
+ * pushed in the ringbuffer.
+ */
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__type(key, uint32_t);
+	__type(value, struct auxiliary_map);
+} iter_auxiliary_maps __weak SEC(".maps");
 
 /**
  * @brief For every CPU on the system we have a counter

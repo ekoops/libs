@@ -77,6 +77,12 @@ static std::string open_params;  // for source plugins, its open params
 static std::unique_ptr<filter_check_list> filter_list;
 static std::shared_ptr<sinsp_filter_factory> filter_factory;
 
+static bool use_threads_iter = false;
+static int threads_iter_tid = 0;
+static bool use_files_iter = false;
+static int files_iter_pid = 0;
+static int files_iter_fd = -1;
+
 sinsp_evt* get_event(sinsp& inspector, std::function<void(const std::string&)> handle_error);
 
 const char* state_type_to_string(ss_plugin_state_type type) {
@@ -329,6 +335,9 @@ void parse_CLI_options(sinsp& inspector, int argc, char** argv) {
 	// clang-format off
 	options.add_options()
 		("h,help", "Print this page.")
+		("1,threads-iter", "tid to filter", cxxopts::value<int>())
+		("2,files-iter", "pid to filter", cxxopts::value<int>())
+		("3,file-fd", "fd to filter (to be used only together with files-iter)", cxxopts::value<int>())
 		("f,filter",
 			"Filter string for events (see "
 			"https://falco.org/docs/rules/supported-fields/ "
@@ -393,6 +402,20 @@ void parse_CLI_options(sinsp& inspector, int argc, char** argv) {
 		if(result.count("help")) {
 			std::cout << options.help() << std::endl;
 			exit(EXIT_SUCCESS);
+		}
+
+		if(result.count("threads-iter")) {
+			threads_iter_tid = result["threads-iter"].as<int>();
+			use_threads_iter = true;
+		}
+
+		if(result.count("files-iter")) {
+			files_iter_pid = result["files-iter"].as<int>();
+			use_files_iter = true;
+		}
+
+		if(result.count("file-fd")) {
+			files_iter_fd = result["file-fd"].as<int>();
 		}
 
 		bool format_set = false;
@@ -772,6 +795,18 @@ int main(int argc, char** argv) {
 	}
 
 	std::cout << "-- Start capture" << std::endl;
+
+	if(use_threads_iter) {
+		inspector.get_threads(threads_iter_tid);
+	}
+
+	if(use_files_iter) {
+		inspector.get_files(files_iter_pid, files_iter_fd);
+	}
+
+	if(use_threads_iter || use_files_iter) {
+		exit(EXIT_SUCCESS);
+	}
 
 	inspector.start_capture();
 

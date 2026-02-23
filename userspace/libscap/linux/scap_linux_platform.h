@@ -77,6 +77,13 @@ struct scap_linux_vtable {
 	int32_t (*get_threadlist)(struct scap_engine_handle engine,
 	                          struct ppm_proclist_info** procinfo_p,
 	                          char* lasterr);
+
+	// todo(ekoops): rename this
+	int32_t (*get_threads)(struct scap_engine_handle engine, int tid_filter, char* error);
+	int32_t (*get_files)(struct scap_engine_handle engine,
+	                     int pid_filter,
+	                     int fd_filter,
+	                     char* error);
 };
 
 struct scap_linux_platform {

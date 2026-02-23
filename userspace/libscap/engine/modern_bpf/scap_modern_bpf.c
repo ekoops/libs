@@ -348,6 +348,24 @@ uint64_t scap_modern_bpf__get_schema_version(struct scap_engine_handle engine) {
 	return HANDLE(engine)->m_schema_version;
 }
 
+int32_t scap_modern_bpf__get_threads(struct scap_engine_handle engine,
+                                     const int tid_filter,
+                                     char* error) {
+	return pman_iter_get_tasks(tid_filter, error);
+}
+
+int32_t scap_modern_bpf__get_files(struct scap_engine_handle engine,
+                                   const int pid_filter,
+                                   const int fd_filter,
+                                   char* error) {
+	return pman_iter_get_task_files(pid_filter, fd_filter, error);
+}
+
+const struct scap_linux_vtable scap_modern_bpf_linux_vtable = {
+        .get_threads = scap_modern_bpf__get_threads,
+        .get_files = scap_modern_bpf__get_files,
+};
+
 struct scap_vtable scap_modern_bpf_engine = {
         .name = MODERN_BPF_ENGINE,
         .savefile_ops = NULL,
