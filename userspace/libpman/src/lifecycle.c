@@ -19,6 +19,7 @@ limitations under the License.
 #include "state.h"
 #include <driver/feature_gates.h>
 #include "events_prog_table.h"
+#include "support_probing.h"
 
 int pman_open_probe() {
 	g_state.skel = bpf_probe__open();
@@ -39,18 +40,46 @@ static void disable_prog_autoloading(const char *prog_name) {
 	pman_print_msgf(FALCOSECURITY_LOG_SEV_DEBUG, "disabled BPF program '%s'", prog_name);
 }
 
+// Search for the availability of the provided symbol by optionally adding a prefix to it depending
+// on the provided attach type.
 // note: this temporarily disables logging.
-static bool is_kernel_symbol_available(const char *symbol) {
+static bool is_kernel_symbol_available(const char *symbol, const enum bpf_attach_type attach_type) {
 	// note: `libbpf_find_vmlinux_btf_id()` emits a log line at warning level if the symbol is not
 	// available. Temporarily disable it to avoid polluting the log stream.
 	const libbpf_print_fn_t old_log_handler = libbpf_set_print(NULL);
+	const bool is_available = libbpf_find_vmlinux_btf_id(symbol, attach_type) >= 0;
+	libbpf_set_print(old_log_handler);
+	return is_available;
+}
+
+// Search for the availability of the provided symbol without adding any prefix to it.
+// note: this temporarily disables logging.
+static bool is_kernel_symbol_available_no_prefix(const char *symbol) {
 	// Actually, 0 corresponds to `BPF_CGROUP_INET_INGRESS`, but use it as "no attach type" value as
 	// currently, the kernel reacts by searching for the availability of the requested symbol
 	// without adding any prefix to it (that is what we want).
 	const int NO_ATTACH_TYPE = 0;
-	const bool is_available = libbpf_find_vmlinux_btf_id(symbol, NO_ATTACH_TYPE) >= 0;
-	libbpf_set_print(old_log_handler);
-	return is_available;
+	return is_kernel_symbol_available(symbol, NO_ATTACH_TYPE);
+}
+
+static void prepare_iter_progs_before_loading() {
+#ifdef CAPTURE_ITERATOR
+	// Disable autoloading for unsupported iterator programs.
+	for(int i = 0; i < ITER_PROG_MAX; i++) {
+		const iter_prog_t *iter_prog = &iter_progs_table[i];
+		const char *prog_name = iter_prog->name;
+		const bool is_prog_supported = iter_support_probing__probe(prog_name) == 0;
+		if(!is_prog_supported) {
+			pman_print_msgf(FALCOSECURITY_LOG_SEV_DEBUG, "unsupported BPF program '%s'", prog_name);
+			disable_prog_autoloading(prog_name);
+		} else {
+			pman_print_msgf(FALCOSECURITY_LOG_SEV_DEBUG, "supported BPF program '%s'", prog_name);
+		}
+
+		// Update the corresponding feature flag in `g_state`.
+		*iter_prog->feature_flag = is_prog_supported;
+	}
+#endif
 }
 
 int pman_prepare_progs_before_loading() {
@@ -125,7 +154,7 @@ int pman_prepare_progs_before_loading() {
 			const ttm_ia32_prog_t *ia32_prog = &ia32_progs[j];
 			bool should_disable = chosen_idx != -1;
 			if(!should_disable) {
-				if(!is_kernel_symbol_available(ia32_prog->kernel_symbol)) {
+				if(!is_kernel_symbol_available_no_prefix(ia32_prog->kernel_symbol)) {
 					pman_print_msgf(
 					        FALCOSECURITY_LOG_SEV_DEBUG,
 					        "kernel symbol '%s' (required by BPF program '%s') not available",
@@ -148,6 +177,8 @@ int pman_prepare_progs_before_loading() {
 			}
 		}
 	}
+
+	prepare_iter_progs_before_loading();
 
 	return 0;
 }
@@ -192,6 +223,10 @@ static void pman_save_attached_progs() {
 	g_state.attached_progs_fds[21] =
 	        bpf_prog_fd_or_default(g_state.skel->progs.ia32_compat_openat2_e);
 	g_state.attached_progs_fds[22] = bpf_prog_fd_or_default(g_state.skel->progs.ia32_openat2_e);
+#ifdef CAPTURE_ITERATOR
+	g_state.attached_progs_fds[23] = bpf_prog_fd_or_default(g_state.skel->progs.dump_task);
+	g_state.attached_progs_fds[24] = bpf_prog_fd_or_default(g_state.skel->progs.dump_task_file);
+#endif
 }
 
 int pman_load_probe() {

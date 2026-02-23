@@ -76,6 +76,20 @@ __weak bool is_dropping;
  */
 __weak void *socket_file_ops = NULL;
 
+/**
+ * @brief An integer used by the `dump_task_file` BPF iterator program which specific file to dump
+ * based on its file descriptor. If set to -1, the filter-by-fd logic is not applied.
+ */
+
+__weak int64_t dump_task_file__fd_filter = -1;
+
+/**
+ * @brief A boolean used by the `dump_task_file` BPF iterator program to determine if socket files
+ * info must be sent to userspace or skipped.
+ */
+
+__weak bool dump_task_file__must_dump_sockets = true;
+
 /*=============================== BPF GLOBAL VARIABLES ===============================*/
 
 /*=============================== BPF_MAP_TYPE_PROG_ARRAY ===============================*/
@@ -130,6 +144,17 @@ struct {
 	__type(key, uint32_t);
 	__type(value, struct capture_settings);
 } capture_settings __weak SEC(".maps");
+
+/**
+ * @brief Global iterator auxiliary map where the event is temporally saved before being pushed to
+ * userspace.
+ */
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, uint32_t);
+	__type(value, struct auxiliary_map);
+} iter_auxiliary_map __weak SEC(".maps");
 
 /* These maps have one entry for each CPU.
  *

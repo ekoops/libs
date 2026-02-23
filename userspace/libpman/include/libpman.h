@@ -22,6 +22,7 @@ limitations under the License.
 #include <stdint.h>
 
 #include <libscap/scap_log.h>
+#include <libscap/scap.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -305,6 +306,26 @@ int pman_attach_openat2_toctou_mitigation_progs(void);
  * @return `0` on success, `errno` in case of error.
  */
 int pman_detach_openat2_toctou_mitigation_progs(void);
+
+/////////////////////////////
+// ITERATORS
+/////////////////////////////
+
+int32_t pman_iter_fetch_task(const struct fetch_callbacks* callbacks,
+                             uint32_t tid,
+                             scap_threadinfo** tinfo,
+                             char* error);
+int32_t pman_iter_fetch_tasks(const struct fetch_callbacks* callbacks, char* error);
+int32_t pman_iter_fetch_proc_file(const struct fetch_callbacks* callbacks,
+                                  uint32_t pid,
+                                  uint32_t fd,
+                                  char* error);
+int32_t pman_iter_fetch_proc_files(const struct fetch_callbacks* callbacks,
+                                   uint32_t pid,
+                                   bool must_fetch_sockets,
+                                   uint64_t* num_files_added,
+                                   char* error);
+int32_t pman_iter_fetch_procs_files(const struct fetch_callbacks* callbacks, char* error);
 
 /////////////////////////////
 // MANAGE RINGBUFFERS

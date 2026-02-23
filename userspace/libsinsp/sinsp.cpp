@@ -719,10 +719,68 @@ void sinsp::open_modern_bpf(unsigned long driver_buffer_bytes_dim,
 	                                                     ::on_proc_table_refresh_end,
 	                                                     ::on_new_entry_from_proc,
 	                                                     this});
+	if(platform) {
+		auto linux_plat = (scap_linux_platform*)platform;
+		linux_plat->m_linux_vtable = &scap_modern_bpf_linux_vtable;
+	}
+
 	try_open_common(&oargs, &scap_modern_bpf_engine, platform, SINSP_MODE_LIVE);
 #else
 	throw sinsp_exception("MODERN_BPF engine is not supported in this build");
 #endif
+}
+
+void sinsp::get_threads(const int tid_filter) const {
+	printf("@@@@@@@@@@@@@@@@@@@@@ get_threads(tid_filter: %d) @@@@@@@@@@@@@@@@@@@@@\n", tid_filter);
+	auto* platform = reinterpret_cast<struct scap_linux_platform*>(m_platform);
+	const struct fetch_callbacks callbacks = {
+	        .proc_entry_cb = m_platform->m_proclist.m_callbacks.m_proc_entry_cb,
+	        .ctx = m_platform->m_proclist.m_callbacks.m_callback_context};
+	char error[256];
+	if(tid_filter == 0) {
+		platform->m_linux_vtable->fetch_threads(m_h->m_engine,
+		                                        &callbacks,
+		                                        reinterpret_cast<char*>(&error));
+	} else {
+		platform->m_linux_vtable->fetch_thread(m_h->m_engine,
+		                                       &callbacks,
+		                                       tid_filter,
+		                                       nullptr,
+		                                       error);
+	}
+}
+
+void sinsp::get_files(const int pid_filter, const int fd_filter) const {
+	printf("@@@@@@@@@@@@@@@@@@@@@ get_files(pid_filter: %d, fd_filter: %d) @@@@@@@@@@@@@@@@@@@@@\n",
+	       pid_filter,
+	       fd_filter);
+	auto* platform = reinterpret_cast<struct scap_linux_platform*>(m_platform);
+	const struct fetch_callbacks callbacks = {
+	        .proc_entry_cb = m_platform->m_proclist.m_callbacks.m_proc_entry_cb,
+	        .ctx = m_platform->m_proclist.m_callbacks.m_callback_context};
+	char error[256];
+	if(pid_filter <= 0) {
+		platform->m_linux_vtable->fetch_procs_files(m_h->m_engine,
+		                                            &callbacks,
+		                                            reinterpret_cast<char*>(&error));
+		return;
+	}
+
+	if(fd_filter < 0) {
+		platform->m_linux_vtable->fetch_proc_files(m_h->m_engine,
+		                                           &callbacks,
+		                                           pid_filter,
+		                                           true,
+		                                           nullptr,
+		                                           reinterpret_cast<char*>(&error));
+		return;
+	}
+
+	platform->m_linux_vtable->fetch_proc_file(m_h->m_engine,
+	                                          &callbacks,
+	                                          pid_filter,
+	                                          fd_filter,
+	                                          reinterpret_cast<char*>(&error));
 }
 
 void sinsp::open_test_input(scap_test_input_data* data, sinsp_mode_t mode) {

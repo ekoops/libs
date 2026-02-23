@@ -17,6 +17,8 @@ limitations under the License.
 */
 
 #include "events_prog_table.h"
+#include "state.h"
+
 /*
  * For every exit event here we have the name of the corresponding bpf program.
  * We can have multiple names in case we need to check the right program
@@ -199,4 +201,9 @@ ttm_progs_t ttm_progs_table[TTM_MAX] = {
         [TTM_OPENAT2] = {{"openat2_e"},
                          {{"ia32_compat_openat2_e", "__ia32_compat_sys_openat2"},
                           {"ia32_openat2_e", "__ia32_sys_openat2"}}},
+};
+
+iter_prog_t iter_progs_table[ITER_PROG_MAX] = {
+        [ITER_PROG_DUMP_TASK] = {"dump_task", &g_state.is_tasks_dumping_supported},
+        [ITER_PROG_DUMP_TASK_FILE] = {"dump_task_file", &g_state.is_task_files_dumping_supported},
 };

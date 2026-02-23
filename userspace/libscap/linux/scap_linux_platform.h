@@ -29,6 +29,11 @@ extern "C" {
 
 struct scap_mountinfo;
 
+struct fetch_callbacks {
+	proc_entry_callback proc_entry_cb;
+	void* ctx;
+};
+
 struct scap_linux_vtable {
 	/**
 	 * @brief get the vpid of a process
@@ -77,6 +82,30 @@ struct scap_linux_vtable {
 	int32_t (*get_threadlist)(struct scap_engine_handle engine,
 	                          struct ppm_proclist_info** procinfo_p,
 	                          char* lasterr);
+
+	// todo(ekoops): rename this
+	int32_t (*fetch_thread)(struct scap_engine_handle engine,
+	                        const struct fetch_callbacks* callbacks,
+	                        uint32_t tid,
+	                        scap_threadinfo** tinfo,
+	                        char* error);
+	int32_t (*fetch_threads)(struct scap_engine_handle engine,
+	                         const struct fetch_callbacks* callbacks,
+	                         char* error);
+	int32_t (*fetch_proc_file)(struct scap_engine_handle engine,
+	                           const struct fetch_callbacks* callbacks,
+	                           uint32_t pid,
+	                           uint32_t fd,
+	                           char* error);
+	int32_t (*fetch_proc_files)(struct scap_engine_handle engine,
+	                            const struct fetch_callbacks* callbacks,
+	                            uint32_t pid,
+	                            bool must_fetch_sockets,
+	                            uint64_t* num_files_added,
+	                            char* error);
+	int32_t (*fetch_procs_files)(struct scap_engine_handle engine,
+	                             const struct fetch_callbacks* callbacks,
+	                             char* error);
 };
 
 struct scap_linux_platform {

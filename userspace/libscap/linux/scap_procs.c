@@ -46,6 +46,7 @@ limitations under the License.
 #include <libscap/debug_log_helpers.h>
 #include <libscap/linux/read_helpers.h>
 #include <libscap/linux/str_helpers.h>
+#include <libscap/scap_likely.h>
 
 // Check that the provided string literal prefixes the line.
 // note: use this only with a string literal.
@@ -816,6 +817,92 @@ static int32_t read_procfs_proc_pid_root(const char* const procfs_proc_dir,
 	return SCAP_SUCCESS;
 }
 
+static struct fetch_callbacks get_fetch_callbacks(const struct scap_proclist* proclist) {
+	const struct fetch_callbacks callbacks = {
+	        .proc_entry_cb = proclist->m_callbacks.m_proc_entry_cb,
+	        .ctx = proclist->m_callbacks.m_callback_context};
+	return callbacks;
+}
+
+static int32_t linux_vtable_fetch_thread(const struct scap_linux_platform* linux_platform,
+                                         const struct scap_proclist* proclist,
+                                         const int64_t tid,
+                                         scap_threadinfo** tinfo_out,
+                                         char* error) {
+	if(!linux_platform->m_linux_vtable || !linux_platform->m_linux_vtable->fetch_thread) {
+		return SCAP_NOT_SUPPORTED;
+	}
+
+	const struct fetch_callbacks callbacks = get_fetch_callbacks(proclist);
+	return linux_platform->m_linux_vtable->fetch_thread(linux_platform->m_engine,
+	                                                    &callbacks,
+	                                                    tid,
+	                                                    tinfo_out,
+	                                                    error);
+}
+
+static int32_t linux_vtable_fetch_threads(const struct scap_linux_platform* linux_platform,
+                                          const struct scap_proclist* proclist,
+                                          char* error) {
+	if(!linux_platform->m_linux_vtable || !linux_platform->m_linux_vtable->fetch_threads) {
+		return SCAP_NOT_SUPPORTED;
+	}
+
+	const struct fetch_callbacks callbacks = get_fetch_callbacks(proclist);
+	return linux_platform->m_linux_vtable->fetch_threads(linux_platform->m_engine,
+	                                                     &callbacks,
+	                                                     error);
+}
+
+static int32_t linux_vtable_fetch_proc_file(const struct scap_linux_platform* linux_platform,
+                                            const struct scap_proclist* proclist,
+                                            const uint32_t pid,
+                                            const uint32_t fd,
+                                            char* error) {
+	if(!linux_platform->m_linux_vtable || !linux_platform->m_linux_vtable->fetch_proc_file) {
+		return SCAP_NOT_SUPPORTED;
+	}
+
+	const struct fetch_callbacks callbacks = get_fetch_callbacks(proclist);
+	return linux_platform->m_linux_vtable->fetch_proc_file(linux_platform->m_engine,
+	                                                       &callbacks,
+	                                                       pid,
+	                                                       fd,
+	                                                       error);
+}
+
+static int32_t linux_vtable_fetch_proc_files(const struct scap_linux_platform* linux_platform,
+                                             const struct scap_proclist* proclist,
+                                             const scap_threadinfo* tinfo,
+                                             const bool must_fetch_sockets,
+                                             uint64_t* num_files_added,
+                                             char* error) {
+	if(!linux_platform->m_linux_vtable || !linux_platform->m_linux_vtable->fetch_proc_files) {
+		return SCAP_NOT_SUPPORTED;
+	}
+
+	const struct fetch_callbacks callbacks = get_fetch_callbacks(proclist);
+	return linux_platform->m_linux_vtable->fetch_proc_files(linux_platform->m_engine,
+	                                                        &callbacks,
+	                                                        tinfo->pid,
+	                                                        must_fetch_sockets,
+	                                                        num_files_added,
+	                                                        error);
+}
+
+static int32_t linux_vtable_fetch_procs_files(const struct scap_linux_platform* linux_platform,
+                                              const struct scap_proclist* proclist,
+                                              char* error) {
+	if(!linux_platform->m_linux_vtable || !linux_platform->m_linux_vtable->fetch_procs_files) {
+		return SCAP_NOT_SUPPORTED;
+	}
+
+	const struct fetch_callbacks callbacks = get_fetch_callbacks(proclist);
+	return linux_platform->m_linux_vtable->fetch_procs_files(linux_platform->m_engine,
+	                                                         &callbacks,
+	                                                         error);
+}
+
 //
 // Add a process to the list by parsing its entry under /proc
 //
@@ -1028,21 +1115,30 @@ static int32_t scap_proc_add_from_proc(struct scap_linux_platform* linux_platfor
 	                                      NULL,
 	                                      &new_tinfo);
 
-	//
-	// Only add fds for processes, not threads
-	//
-	if(new_tinfo->pid == new_tinfo->tid) {
-		res = scap_fd_scan_fd_dir(linux_platform,
-		                          proclist,
-		                          dir_name,
-		                          new_tinfo->pid,
-		                          new_tinfo,
-		                          sockets_by_ns,
-		                          num_fds_ret,
-		                          error);
+	// Retrieve files only if this is the main thread.
+	if(new_tinfo->pid != new_tinfo->tid) {
+		return SCAP_SUCCESS;
 	}
 
-	return res;
+	const bool must_fetch_sockets = *sockets_by_ns != (void*)-1;
+	res = linux_vtable_fetch_proc_files(linux_platform,
+	                                    proclist,
+	                                    new_tinfo,
+	                                    must_fetch_sockets,
+	                                    num_fds_ret,
+	                                    error);
+	if(res != SCAP_NOT_SUPPORTED) {
+		return res;
+	}
+
+	return scap_fd_scan_fd_dir(linux_platform,
+	                           proclist,
+	                           dir_name,
+	                           new_tinfo->pid,
+	                           new_tinfo,
+	                           sockets_by_ns,
+	                           num_fds_ret,
+	                           error);
 }
 
 // Read a single thread from the provided proc dir.
@@ -1094,6 +1190,161 @@ static bool is_xid_filename(const char* str) {
 		}
 	}
 	return true;
+}
+
+// Scan all files in the main thread table for all processes under /proc.
+static int32_t fetch_procfs_procs_files(struct scap_linux_platform* linux_platform,
+                                        struct scap_proclist* proclist,
+                                        char* procfs_dir_path,
+                                        char* error) {
+	DIR* procfs_dir = opendir(procfs_dir_path);
+	if(procfs_dir == NULL) {
+		scap_errprintf(error, errno, "error opening the %s directory", procfs_dir_path);
+		return SCAP_NOTFOUND;
+	}
+
+	// Do timing tracking only if one or both of the timing parameters is configured to non-zero.
+	const bool do_timing = linux_platform->m_proc_scan_timeout_ms != SCAP_PROC_SCAN_TIMEOUT_NONE ||
+	                       linux_platform->m_proc_scan_log_interval_ms != SCAP_PROC_SCAN_LOG_NONE;
+	uint64_t monotonic_ts_context = SCAP_GET_CUR_TS_MS_CONTEXT_INIT;
+	uint64_t start_ts_ms = 0;
+	uint64_t last_log_ts_ms = 0;
+	uint64_t last_proc_ts_ms = 0;
+	uint64_t cur_ts_ms = 0;
+	uint64_t min_proc_time_ms = UINT64_MAX;
+	uint64_t max_proc_time_ms = 0;
+	if(do_timing) {
+		start_ts_ms = scap_get_monotonic_ts_ms(&monotonic_ts_context);
+		last_log_ts_ms = start_ts_ms;
+		last_proc_ts_ms = start_ts_ms;
+	}
+
+	uint64_t num_procs_processed = 0;
+	uint64_t total_num_fds = 0;
+	uint32_t last_pid_processed = 0;
+
+	char procfs_proc_dir[SCAP_MAX_PATH_SIZE];
+	struct scap_ns_socket_list* sockets_by_ns = NULL;
+	bool timeout_expired = false;
+
+	while(!timeout_expired) {
+		const struct dirent* procfs_dir_entry = readdir(procfs_dir);
+		if(procfs_dir_entry == NULL) {
+			break;
+		}
+
+		if(!is_xid_filename(procfs_dir_entry->d_name)) {
+			continue;
+		}
+
+		// Gather the process PID, which is the directory name.
+		const uint32_t pid = (uint32_t)atoi(procfs_dir_entry->d_name);
+
+		snprintf(procfs_proc_dir, sizeof(procfs_proc_dir), "%s/%u", procfs_dir_path, pid);
+
+		// Gather all files for this process.
+		uint64_t num_fds_this_proc;
+		const int32_t res = scap_fd_scan_fd_dir(linux_platform,
+		                                        proclist,
+		                                        procfs_proc_dir,
+		                                        pid,
+		                                        NULL,
+		                                        &sockets_by_ns,
+		                                        &num_fds_this_proc,
+		                                        error);
+		if(res != SCAP_SUCCESS) {
+			continue;
+		}
+
+		// Process files successfully processed.
+		last_pid_processed = pid;
+		num_procs_processed++;
+		total_num_fds += num_fds_this_proc;
+
+		// After successful processing of a process, perform timing processing if configured.
+		if(!do_timing) {
+			continue;
+		}
+
+		cur_ts_ms = scap_get_monotonic_ts_ms(&monotonic_ts_context);
+		const uint64_t total_elapsed_time_ms = cur_ts_ms - start_ts_ms;
+
+		const uint64_t this_proc_elapsed_time_ms = cur_ts_ms - last_proc_ts_ms;
+		last_proc_ts_ms = cur_ts_ms;
+
+		if(this_proc_elapsed_time_ms < min_proc_time_ms) {
+			min_proc_time_ms = this_proc_elapsed_time_ms;
+		}
+		if(this_proc_elapsed_time_ms > max_proc_time_ms) {
+			max_proc_time_ms = this_proc_elapsed_time_ms;
+		}
+
+		if(linux_platform->m_proc_scan_log_interval_ms != SCAP_PROC_SCAN_LOG_NONE) {
+			const uint64_t log_elapsed_time_ms = cur_ts_ms - last_log_ts_ms;
+			if(log_elapsed_time_ms >= linux_platform->m_proc_scan_log_interval_ms) {
+				scap_debug_log(linux_platform,
+				               "proc_files_scan: %ld proc in %ld ms, avg=%ld/min=%ld/max=%ld, "
+				               "last pid %ld, num_fds %ld",
+				               num_procs_processed,
+				               total_elapsed_time_ms,
+				               total_elapsed_time_ms / num_procs_processed,
+				               min_proc_time_ms,
+				               max_proc_time_ms,
+				               last_pid_processed,
+				               total_num_fds);
+				last_log_ts_ms = cur_ts_ms;
+			}
+		}
+
+		if(linux_platform->m_proc_scan_timeout_ms != SCAP_PROC_SCAN_TIMEOUT_NONE) {
+			if(total_elapsed_time_ms >= linux_platform->m_proc_scan_timeout_ms) {
+				timeout_expired = true;
+			}
+		}
+	}
+
+	closedir(procfs_dir);
+	if(sockets_by_ns != NULL) {
+		scap_fd_free_ns_sockets_list(&sockets_by_ns);
+	}
+
+	// Perform timing processing if configured.
+	if(!do_timing) {
+		return SCAP_SUCCESS;
+	}
+
+	cur_ts_ms = scap_get_monotonic_ts_ms(&monotonic_ts_context);
+	const uint64_t total_elapsed_time_ms = cur_ts_ms - start_ts_ms;
+	const uint64_t avg_proc_time_ms =
+	        num_procs_processed != 0 ? total_elapsed_time_ms / num_procs_processed : 0;
+
+	if(timeout_expired) {
+		scap_debug_log(linux_platform,
+		               "proc_files_scan TIMEOUT (%ld ms): %ld proc in %ld ms, "
+		               "avg=%ld/min=%ld/max=%ld, last pid %ld, num_fds %ld",
+		               linux_platform->m_proc_scan_timeout_ms,
+		               num_procs_processed,
+		               total_elapsed_time_ms,
+		               avg_proc_time_ms,
+		               min_proc_time_ms,
+		               max_proc_time_ms,
+		               last_pid_processed,
+		               total_num_fds);
+	} else if(linux_platform->m_proc_scan_log_interval_ms != SCAP_PROC_SCAN_LOG_NONE &&
+	          num_procs_processed != 0) {
+		scap_debug_log(linux_platform,
+		               "proc_files_scan DONE: %ld proc in %ld ms, avg=%ld/min=%ld/max=%ld, "
+		               "last pid %ld, num_fds %ld",
+		               num_procs_processed,
+		               total_elapsed_time_ms,
+		               avg_proc_time_ms,
+		               min_proc_time_ms,
+		               max_proc_time_ms,
+		               last_pid_processed,
+		               total_num_fds);
+	}
+
+	return SCAP_SUCCESS;
 }
 
 //
@@ -1352,16 +1603,65 @@ int32_t scap_linux_getpid_global(struct scap_platform* platform, int64_t* pid, c
 
 int32_t scap_linux_proc_get(struct scap_platform* platform, int64_t tid, bool scan_sockets) {
 	struct scap_linux_platform* linux_platform = (struct scap_linux_platform*)platform;
+	struct scap_proclist* proclist = &platform->m_proclist;
+	char* error = linux_platform->m_lasterr;
 
-	char filename[SCAP_MAX_PATH_SIZE];
-	snprintf(filename, sizeof(filename), "%s/proc", scap_get_host_root());
+	scap_threadinfo* tinfo = NULL;
+	int32_t res = linux_vtable_fetch_thread(linux_platform, proclist, tid, &tinfo, error);
+	if(res == SCAP_NOT_SUPPORTED) {
+		// Fall back to procfs process lookup.
+		char proc_dir[SCAP_MAX_PATH_SIZE];
+		snprintf(proc_dir, sizeof(proc_dir), "%s/proc", scap_get_host_root());
+		return scap_proc_read_thread(linux_platform, proclist, proc_dir, tid, error, scan_sockets);
+	}
 
-	return scap_proc_read_thread(linux_platform,
-	                             &platform->m_proclist,
-	                             filename,
-	                             tid,
-	                             linux_platform->m_lasterr,
-	                             scan_sockets);
+	// Do now proceed with file information gathering if we encountered an error.
+	if(res != SCAP_SUCCESS) {
+		return res;
+	}
+
+	if(scap_unlikely(!tinfo)) {
+		return scap_errprintf(
+		        error,
+		        0,
+		        "bug: `linux_vtable_fetch_thread()` didn't populate the threadinfo pointer");
+	}
+
+	// Retrieve files only if this is the main thread.
+	if(tinfo->pid != tinfo->tid) {
+		return SCAP_SUCCESS;
+	}
+
+	uint64_t num_files_added = 0;
+	res = linux_vtable_fetch_proc_files(linux_platform,
+	                                    proclist,
+	                                    tinfo,
+	                                    scan_sockets,
+	                                    &num_files_added,
+	                                    error);
+	if(res != SCAP_NOT_SUPPORTED) {
+		return res;
+	}
+
+	// Fall back to procfs process files lookup.
+	char dir_name[SCAP_MAX_PATH_SIZE];
+	snprintf(dir_name, sizeof(dir_name), "%s/proc/%ld", scap_get_host_root(), tinfo->pid);
+	struct scap_ns_socket_list* sockets_by_ns = NULL;
+	if(!scan_sockets) {
+		sockets_by_ns = (void*)-1;
+	}
+	res = scap_fd_scan_fd_dir(linux_platform,
+	                          proclist,
+	                          dir_name,
+	                          tinfo->pid,
+	                          tinfo,
+	                          &sockets_by_ns,
+	                          &num_files_added,
+	                          error);
+	if(sockets_by_ns != NULL && sockets_by_ns != (void*)-1) {
+		scap_fd_free_ns_sockets_list(&sockets_by_ns);
+	}
+	return res;
 }
 
 bool scap_linux_is_thread_alive(struct scap_platform* platform,
@@ -1401,25 +1701,43 @@ bool scap_linux_is_thread_alive(struct scap_platform* platform,
 
 int32_t scap_linux_refresh_proc_table(struct scap_platform* platform,
                                       struct scap_proclist* proclist) {
-	char procdirname[SCAP_MAX_PATH_SIZE];
 	struct scap_linux_platform* linux_platform = (struct scap_linux_platform*)platform;
+	char* error = linux_platform->m_lasterr;
 
 	if(proclist->m_proclist) {
 		scap_proc_free_table(proclist);
 		proclist->m_proclist = NULL;
 	}
 
-	snprintf(procdirname, sizeof(procdirname), "%s/proc", scap_get_host_root());
 	scap_cgroup_enable_cache(&linux_platform->m_cgroups);
 	proclist->m_callbacks.m_refresh_start_cb(proclist->m_callbacks.m_callback_context);
-	int32_t ret = _scap_proc_scan_proc_dir_impl(linux_platform,
-	                                            proclist,
-	                                            procdirname,
-	                                            -1,
-	                                            linux_platform->m_lasterr);
+
+	int32_t res = linux_vtable_fetch_threads(linux_platform, proclist, error);
+	if(res == SCAP_NOT_SUPPORTED) {
+		// Fall back to procfs processes lookup.
+		char procfs_dir_path[SCAP_MAX_PATH_SIZE];
+		snprintf(procfs_dir_path, sizeof(procfs_dir_path), "%s/proc", scap_get_host_root());
+		res = _scap_proc_scan_proc_dir_impl(linux_platform, proclist, procfs_dir_path, -1, error);
+		goto cleanup;
+	}
+
+	// Do not proceed with files information gathering if we encountered an error.
+	if(res != SCAP_SUCCESS) {
+		goto cleanup;
+	}
+
+	res = linux_vtable_fetch_procs_files(linux_platform, proclist, error);
+	if(res == SCAP_NOT_SUPPORTED) {
+		// Fall back to procfs files lookup.
+		char procfs_dir_path[SCAP_MAX_PATH_SIZE];
+		snprintf(procfs_dir_path, sizeof(procfs_dir_path), "%s/proc", scap_get_host_root());
+		res = fetch_procfs_procs_files(linux_platform, proclist, procfs_dir_path, error);
+	}
+
+cleanup:
 	proclist->m_callbacks.m_refresh_end_cb(proclist->m_callbacks.m_callback_context);
 	scap_cgroup_clear_cache(&linux_platform->m_cgroups);
-	return ret;
+	return res;
 }
 
 int32_t scap_linux_get_threadlist(struct scap_platform* platform,
@@ -1538,28 +1856,31 @@ error:
 }
 
 int32_t scap_linux_get_fdlist(struct scap_platform* platform,
-                              struct scap_threadinfo* tinfo,
+                              scap_threadinfo* tinfo,
                               char* lasterr) {
 	if(!tinfo) {
 		return scap_errprintf(lasterr, 0, "tinfo must be non-NULL");
 	}
 
-	int res = SCAP_SUCCESS;
-	uint64_t num_fds_ret = 0;
-	char proc_dir[SCAP_MAX_PATH_SIZE];
-	struct scap_ns_socket_list* sockets_by_ns = NULL;
 	struct scap_linux_platform* linux_platform = (struct scap_linux_platform*)platform;
+	struct scap_proclist* proclist = &platform->m_proclist;
+	int32_t res =
+	        linux_vtable_fetch_proc_files(linux_platform, proclist, tinfo, true, NULL, lasterr);
+	if(res != SCAP_NOT_SUPPORTED) {
+		return res;
+	}
 
-	// We collect file descriptors only for the main thread
+	// Fall back to procfs process files lookup (main thread only).
+	char proc_dir[SCAP_MAX_PATH_SIZE];
 	snprintf(proc_dir, sizeof(proc_dir), "%s/proc/%lu/", scap_get_host_root(), tinfo->pid);
-
+	struct scap_ns_socket_list* sockets_by_ns = NULL;
 	res = scap_fd_scan_fd_dir(linux_platform,
-	                          &platform->m_proclist,
+	                          proclist,
 	                          proc_dir,
 	                          tinfo->pid,
 	                          tinfo,
 	                          &sockets_by_ns,
-	                          &num_fds_ret,
+	                          NULL,
 	                          lasterr);
 	if(sockets_by_ns != NULL) {
 		scap_fd_free_ns_sockets_list(&sockets_by_ns);
@@ -1568,23 +1889,26 @@ int32_t scap_linux_get_fdlist(struct scap_platform* platform,
 }
 
 int32_t scap_linux_get_fdinfo(struct scap_platform* platform,
-                              struct scap_threadinfo* tinfo,
-                              int const fd,
+                              scap_threadinfo* tinfo,
+                              const int fd,
                               char* lasterr) {
 	if(!tinfo) {
 		return scap_errprintf(lasterr, 0, "tinfo must be non-NULL");
 	}
 
-	int res = SCAP_SUCCESS;
+	const struct scap_linux_platform* linux_platform = (struct scap_linux_platform*)platform;
+	struct scap_proclist* proclist = &platform->m_proclist;
+	int32_t res = linux_vtable_fetch_proc_file(linux_platform, proclist, tinfo->pid, fd, lasterr);
+	if(res != SCAP_NOT_SUPPORTED) {
+		return res;
+	}
+
+	// Fall back to procfs process file lookup (main thread only).
 	char proc_dir[SCAP_MAX_PATH_SIZE];
-	struct scap_ns_socket_list* sockets_by_ns = NULL;
-	struct scap_linux_platform* linux_platform = (struct scap_linux_platform*)platform;
-
-	// We get file descriptor info from the main thread
 	snprintf(proc_dir, sizeof(proc_dir), "%s/proc/%lu/", scap_get_host_root(), tinfo->pid);
-
+	struct scap_ns_socket_list* sockets_by_ns = NULL;
 	res = scap_fd_get_fdinfo(linux_platform,
-	                         &platform->m_proclist,
+	                         proclist,
 	                         proc_dir,
 	                         tinfo,
 	                         fd,
