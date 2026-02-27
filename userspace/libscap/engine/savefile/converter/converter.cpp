@@ -17,6 +17,7 @@ limitations under the License.
 */
 
 #include <driver/ppm_events_public.h>
+#include <driver/ppm_param_helpers.h>
 #include <converter/table.h>
 #include <converter/results.h>
 #include <converter/debug_macro.h>
@@ -188,123 +189,24 @@ static const char *get_param_ptr(const scap_evt *evt,
 }
 
 static uint32_t get_min_param_len_from_type(const ppm_param_type t) {
-	switch(t) {
-	case PT_INT8:
-	case PT_UINT8:
-	case PT_FLAGS8:
-	case PT_ENUMFLAGS8:
-	case PT_SIGTYPE:
-		return 1;
-
-	case PT_INT16:
-	case PT_UINT16:
-	case PT_FLAGS16:
-	case PT_ENUMFLAGS16:
-	case PT_SYSCALLID:
-		return 2;
-
-	case PT_INT32:
-	case PT_UINT32:
-	case PT_FLAGS32:
-	case PT_ENUMFLAGS32:
-	case PT_UID:
-	case PT_GID:
-	case PT_MODE:
-	case PT_SIGSET:
-		return 4;
-
-	case PT_INT64:
-	case PT_UINT64:
-	case PT_RELTIME:
-	case PT_ABSTIME:
-	case PT_ERRNO:
-	case PT_FD:
-	case PT_PID:
-		return 8;
-
-	case PT_BYTEBUF:
-	case PT_CHARBUF:
-	case PT_SOCKTUPLE:
-	case PT_FDLIST:
-	case PT_FSPATH:
-	case PT_CHARBUFARRAY:
-	case PT_CHARBUF_PAIR_ARRAY:
-	case PT_FSRELPATH:
-	case PT_DYN:
-	case PT_SOCKADDR:
-		return 0;
-
-	default:
-		// We forgot to handle something
-		assert(false);
-		break;
+	uint32_t min_param_length = 0;
+	if(const int res = ppm_param_min_len_from_type(t, &min_param_length); res < 0) {
+		throw std::runtime_error(
+		        "Unexpected error while computing minimum parameter length from type " +
+		        std::to_string(t) + ": " + std::to_string(res));
 	}
-	assert(false);
-	return 0;
+	return min_param_length;
 }
 
 static uint32_t get_max_param_len_from_type(const ppm_param_type t, const size_t len_size) {
-	switch(t) {
-	case PT_INT8:
-	case PT_UINT8:
-	case PT_FLAGS8:
-	case PT_ENUMFLAGS8:
-	case PT_SIGTYPE:
-		return 1;
-
-	case PT_INT16:
-	case PT_UINT16:
-	case PT_FLAGS16:
-	case PT_ENUMFLAGS16:
-	case PT_SYSCALLID:
-		return 2;
-
-	case PT_INT32:
-	case PT_UINT32:
-	case PT_FLAGS32:
-	case PT_ENUMFLAGS32:
-	case PT_UID:
-	case PT_GID:
-	case PT_MODE:
-	case PT_SIGSET:
-		return 4;
-
-	case PT_INT64:
-	case PT_UINT64:
-	case PT_RELTIME:
-	case PT_ABSTIME:
-	case PT_ERRNO:
-	case PT_FD:
-	case PT_PID:
-		return 8;
-
-	case PT_BYTEBUF:
-	case PT_CHARBUF:
-	case PT_SOCKTUPLE:
-	case PT_FDLIST:
-	case PT_FSPATH:
-	case PT_CHARBUFARRAY:
-	case PT_CHARBUF_PAIR_ARRAY:
-	case PT_FSRELPATH:
-	case PT_DYN:
-	case PT_SOCKADDR:
-		switch(len_size) {
-		case sizeof(uint16_t): {
-			return std::numeric_limits<uint16_t>::max();
-		}
-		case sizeof(uint32_t): {
-			return std::numeric_limits<uint32_t>::max();
-		}
-		default:
-			throw std::runtime_error("Unexpected length size: " + std::to_string(len_size));
-		}
-
-	default:
-		// We forgot to handle something
-		assert(false);
-		break;
+	uint32_t max_param_length = 0;
+	if(const int res = ppm_param_max_len_from_type(t, len_size, &max_param_length); res < 0) {
+		throw std::runtime_error(
+		        "Unexpected error while computing maximum parameter length from type " +
+		        std::to_string(t) + " for length size " + std::to_string(len_size) + ": " +
+		        std::to_string(res));
 	}
-	return 0;
+	return max_param_length;
 }
 
 static uint8_t get_default_value_size_bytes_from_type(const ppm_param_type t) {
