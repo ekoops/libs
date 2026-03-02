@@ -910,6 +910,12 @@ void sinsp::on_new_entry_from_proc(void* context,
                                    int64_t tid,
                                    scap_threadinfo* tinfo,
                                    scap_fdinfo* fdinfo) {
+	// If we end up adding a thread to the thread table, we must create thread dependencies
+	// depending on the fact we are in the context of a full procfs scan or not. Indeed, if we are
+	// in a full procfs scan, we will create all thread dependencies in one shot after we finish it.
+	// In all the other cases (single thread/file fetching), we must create it here.
+	bool must_create_thread_dependencies = !m_is_full_procfs_scan_in_progress;
+
 	//
 	// Retrieve machine information if we don't have it yet
 	//
@@ -949,10 +955,12 @@ void sinsp::on_new_entry_from_proc(void* context,
 		if(is_nodriver()) {
 			auto existing_tinfo = find_thread(tid, true);
 			if(existing_tinfo == nullptr || newti->m_clone_ts > existing_tinfo->m_clone_ts) {
-				sinsp_tinfo = m_thread_manager->add_thread(std::move(newti), true);
+				sinsp_tinfo = m_thread_manager->add_thread(std::move(newti),
+				                                           must_create_thread_dependencies);
 			}
 		} else {
-			sinsp_tinfo = m_thread_manager->add_thread(std::move(newti), true);
+			sinsp_tinfo =
+			        m_thread_manager->add_thread(std::move(newti), must_create_thread_dependencies);
 		}
 		if(sinsp_tinfo) {
 			// in case the inspector is configured with an internal filter,
@@ -1048,7 +1056,8 @@ void sinsp::on_new_entry_from_proc(void* context,
 			                               tinfo->pid,
 			                               tinfo->gid,
 			                               must_notify_thread_user_update());
-			sinsp_tinfo = m_thread_manager->add_thread(std::move(newti), true);
+			sinsp_tinfo =
+			        m_thread_manager->add_thread(std::move(newti), must_create_thread_dependencies);
 			if(sinsp_tinfo == nullptr) {
 				ASSERT(false);
 				return;
@@ -1108,11 +1117,14 @@ void sinsp::on_new_entry_from_proc(void* context,
 }
 
 void sinsp::on_proc_table_refresh_start() {
+	m_is_full_procfs_scan_in_progress = true;
 	m_suppress.initialize();
 }
 
 void sinsp::on_proc_table_refresh_end() {
+	m_is_full_procfs_scan_in_progress = false;
 	m_suppress.finalize();
+	m_thread_manager->create_thread_dependencies_after_proc_scan();
 }
 
 int32_t on_new_entry_from_proc(void* context,
