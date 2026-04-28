@@ -250,19 +250,45 @@ protected:
 	const filter_check_info* m_info = nullptr;
 	uint32_t m_field_id = (uint32_t)-1;
 
+	// Lazily allocated on the first dirty-string encounter. Nullptr for instances that never
+	// encounter invalid UTF-8 sequences.
+	std::unique_ptr<std::string> m_sanitized_str_storage;
+
 	inline void check_rhs_field_type_consistency() const;
 
 	// Helper that must be used while extracting a single string value. It returns a pointer to the
-	// first character of `str` and sets `*len` to the string length. If `must_sanitize` is true, it
-	// sanitizes `str` first.
+	// first character of `str` and sets `*len` to the string length. If `must_sanitize` is true and
+	// `str` contains invalid UTF-8 sequences, the sanitized copy is written into
+	// `*sanitized_storage` (lazily allocated on first use) and a pointer to it is returned instead.
 	static uint8_t* extract_single_string(std::string& str,
 	                                      uint32_t* len,
-	                                      const bool must_sanitize) {
-		if(must_sanitize) {
-			sanitize_string(str);
-		}
+	                                      const bool must_sanitize,
+	                                      std::unique_ptr<std::string>& sanitized_storage) {
+		const auto* const ptr = reinterpret_cast<const unsigned char*>(str.data());
 		*len = str.size();
-		return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(str.c_str()));
+		if(!must_sanitize) {
+			return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(ptr));
+		}
+
+		// Check if the string needs sanitization.
+		const auto* const end_ptr = ptr + *len;
+		const auto* const first_invalid_ptr = utf8_first_invalid_seq(ptr, end_ptr);
+		// String already sanitized, return it.
+		if(first_invalid_ptr == end_ptr) {
+			return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(ptr));
+		}
+
+		// String needs sanitization. Store the sanitized version in `*sanitized_storage` and
+		// return a pointer to it.
+		if(!sanitized_storage) {
+			sanitized_storage = std::make_unique<std::string>();
+		}
+		const auto valid_prefix_len = static_cast<size_t>(first_invalid_ptr - ptr);
+		sanitized_storage->clear();
+		sanitized_storage->reserve(*len);
+		append_sanitized_string(*sanitized_storage, str, valid_prefix_len);
+		*len = static_cast<uint32_t>(sanitized_storage->size());
+		return reinterpret_cast<uint8_t*>(sanitized_storage->data());
 	}
 
 	// Helper that must be used while extracting a single C string value. It returns `str` and sets
