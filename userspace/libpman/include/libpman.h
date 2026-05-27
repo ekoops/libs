@@ -56,19 +56,19 @@ struct scap_stats;
  * @param buf_bytes_dim dimension of a single per-CPU buffer in bytes.
  * @param cpus_for_each_buffer number of CPUs to which we want to associate a ring buffer.
  * @param allocate_online_only if true, allocate ring buffers taking only into account online CPUs.
- * @return `0` on success, `-1` in case of error.
+ * @return a pointer to the allocated state on success, `NULL` in case of error.
  */
-int pman_init_state(falcosecurity_log_fn log_fn,
-                    unsigned long buf_bytes_dim,
-                    uint16_t cpus_for_each_buffer,
-                    bool allocate_online_only);
+struct internal_state *pman_init_state(falcosecurity_log_fn log_fn,
+                                       unsigned long buf_bytes_dim,
+                                       uint16_t cpus_for_each_buffer,
+                                       bool allocate_online_only);
 
 /**
  * @brief Return the number of allocated ring buffers.
  *
  * @return number of allocated ring buffers.
  */
-int pman_get_required_buffers(void);
+int pman_get_required_buffers(const struct internal_state *state);
 
 /**
  * @brief Return whether modern bpf is supported by running kernel.
@@ -87,7 +87,7 @@ bool pman_check_support();
  *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_open_probe(void);
+int pman_open_probe(struct internal_state *state);
 
 /**
  * @brief Prepares the bpf skeleton object checking if
@@ -95,7 +95,8 @@ int pman_open_probe(void);
  *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_prepare_progs_before_loading(void);
+// todo(ekoops): move internal table to state
+int pman_prepare_progs_before_loading(struct internal_state *state);
 
 /**
  * @brief Load into the kernel all the programs and maps
@@ -103,7 +104,7 @@ int pman_prepare_progs_before_loading(void);
  *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_load_probe(void);
+int pman_load_probe(struct internal_state *state);
 
 /**
  * @brief Clean what we have previously allocated:
@@ -112,7 +113,7 @@ int pman_load_probe(void);
  * - consumers/producers vectors
  * - stats buffer dynamically allocated
  */
-void pman_close_probe(void);
+void pman_close_probe(struct internal_state **state);
 
 /////////////////////////////
 // MANAGE RINGBUFFERS
@@ -127,7 +128,7 @@ void pman_close_probe(void);
  *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_prepare_ringbuf_array_before_loading(void);
+int pman_prepare_ringbuf_array_before_loading(struct internal_state *state);
 
 /**
  * @brief Performs all necessary operations on ringbuf array after the
@@ -136,7 +137,7 @@ int pman_prepare_ringbuf_array_before_loading(void);
  *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_finalize_ringbuf_array_after_loading(void);
+int pman_finalize_ringbuf_array_after_loading(struct internal_state *state);
 
 /**
  * @brief Search for the event with the lowest timestamp in
@@ -147,7 +148,7 @@ int pman_finalize_ringbuf_array_after_loading(void);
  * @param buffer_id in case of success returns the id of the ring buffer
  * from which we retrieved the event, otherwise return `-1`.
  */
-void pman_consume_first_event(void** event_ptr, int16_t* buffer_id);
+void pman_consume_first_event(struct internal_state *state, void **event_ptr, int16_t *buffer_id);
 
 /////////////////////////////
 // CAPTURE (EXCHANGE VALUES WITH BPF SIDE)
@@ -161,7 +162,7 @@ void pman_consume_first_event(void** event_ptr, int16_t* buffer_id);
  *
  * @return `0` on success, `1` in case of error.
  */
-int pman_enforce_sc_set(bool* sc_set);
+int pman_enforce_sc_set(const struct internal_state *state, bool *sc_set);
 
 /**
  * @brief Receive a pointer to `struct scap_stats` and fill it
@@ -170,7 +171,7 @@ int pman_enforce_sc_set(bool* sc_set);
  * @param scap_stats_struct pointer to `struct scap_stats`.
  * @return `0` on success, `errno` in case of error.
  */
-int pman_get_scap_stats(struct scap_stats* scap_stats_struct);
+int pman_get_scap_stats(struct scap_stats *scap_stats_struct);
 
 /**
  * @brief Return a `metrics_v2` struct filled with statistics.
@@ -181,7 +182,10 @@ int pman_get_scap_stats(struct scap_stats* scap_stats_struct);
  *
  * @return pointer to `struct metrics_v2`
  */
-struct metrics_v2* pman_get_metrics_v2(uint32_t flags, uint32_t* nstats, int32_t* rc);
+struct metrics_v2 *pman_get_metrics_v2(struct internal_state *state,
+                                       uint32_t flags,
+                                       uint32_t *nstats,
+                                       int32_t *rc);
 
 /**
  * @brief Receive an array with `nCPUs` elements. For every CPU
@@ -190,7 +194,7 @@ struct metrics_v2* pman_get_metrics_v2(uint32_t flags, uint32_t* nstats, int32_t
  * @param n_events_per_cpu array of `nCPUs` elements.
  * @return `0` on success, `errno` in case of error.
  */
-int pman_get_n_tracepoint_hit(long* n_events_per_cpu);
+int pman_get_n_tracepoint_hit(const struct internal_state *state, long *n_events_per_cpu);
 
 /////////////////////////////
 // MAPS
@@ -258,7 +262,7 @@ void pman_set_scap_tid(int32_t scap_tid);
  *
  * @return API version
  */
-uint64_t pman_get_probe_api_ver(void);
+uint64_t pman_get_probe_api_ver(const struct internal_state *state);
 
 /**
  * @brief Get schema version to check it a runtime.
@@ -275,7 +279,7 @@ uint64_t pman_get_probe_schema_ver(void);
  *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_prepare_maps_before_loading(void);
+int pman_prepare_maps_before_loading(const struct internal_state *state);
 
 /**
  * @brief Performs all necessary operations on maps after the
@@ -285,7 +289,7 @@ int pman_prepare_maps_before_loading(void);
  *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_finalize_maps_after_loading(void);
+int pman_finalize_maps_after_loading(const struct internal_state *state);
 
 /**
  * @brief Mark a single syscall as (un)interesting
@@ -295,27 +299,36 @@ int pman_finalize_maps_after_loading(void);
  *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_mark_single_64bit_syscall(int syscall_id, bool interesting);
+int pman_mark_single_64bit_syscall(const struct internal_state *state,
+                                   int syscall_id,
+                                   bool interesting);
 
 /////////////////////////////
 // ITERATORS
 /////////////////////////////
 
-int32_t pman_iter_fetch_task(const struct scap_fetch_callbacks* callbacks,
+int32_t pman_iter_fetch_task(const struct internal_state *state,
+                             const struct scap_fetch_callbacks *callbacks,
                              uint32_t tid,
-                             scap_threadinfo** tinfo,
-                             char* error);
-int32_t pman_iter_fetch_tasks(const struct scap_fetch_callbacks* callbacks, char* error);
-int32_t pman_iter_fetch_proc_file(const struct scap_fetch_callbacks* callbacks,
+                             scap_threadinfo **tinfo,
+                             char *error);
+int32_t pman_iter_fetch_tasks(const struct internal_state *state,
+                              const struct scap_fetch_callbacks *callbacks,
+                              char *error);
+int32_t pman_iter_fetch_proc_file(const struct internal_state *state,
+                                  const struct scap_fetch_callbacks *callbacks,
                                   uint32_t pid,
                                   uint32_t fd,
-                                  char* error);
-int32_t pman_iter_fetch_proc_files(const struct scap_fetch_callbacks* callbacks,
+                                  char *error);
+int32_t pman_iter_fetch_proc_files(const struct internal_state *state,
+                                   const struct scap_fetch_callbacks *callbacks,
                                    uint32_t pid,
                                    bool must_fetch_sockets,
-                                   uint64_t* num_files_fetched,
-                                   char* error);
-int32_t pman_iter_fetch_procs_files(const struct scap_fetch_callbacks* callbacks, char* error);
+                                   uint64_t *num_files_fetched,
+                                   char *error);
+int32_t pman_iter_fetch_procs_files(const struct internal_state *state,
+                                    const struct scap_fetch_callbacks *callbacks,
+                                    char *error);
 
 #ifdef __cplusplus
 }

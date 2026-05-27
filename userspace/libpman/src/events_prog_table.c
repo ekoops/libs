@@ -24,7 +24,7 @@ limitations under the License.
  * We can have multiple names in case we need to check the right program
  * that needs to be loaded, eg: because of different bpf features.
  */
-event_prog_t exit_event_progs_table[PPM_EVENT_MAX][MAX_FEATURE_CHECKS] = {
+static event_prog_t exit_event_progs_table[PPM_EVENT_MAX][MAX_FEATURE_CHECKS] = {
         [PPME_GENERIC_X] = {{"generic_x", 0}},
         [PPME_SYSCALL_GETCWD_X] = {{"getcwd_x", 0}},
         [PPME_SYSCALL_GETDENTS_X] = {{"getdents_x", 0}},
@@ -187,7 +187,16 @@ event_prog_t exit_event_progs_table[PPM_EVENT_MAX][MAX_FEATURE_CHECKS] = {
         [PPME_SYSCALL_KEYCTL_X] = {{"keyctl_x", 0}},
 };
 
-ttm_progs_t ttm_progs_table[TTM_MAX] = {
+event_prog_t *init_exit_event_progs_table() {
+	event_prog_t *table = malloc(sizeof(event_prog_t) * PPM_EVENT_MAX * MAX_FEATURE_CHECKS);
+	if(!table) {
+		return NULL;
+	}
+	memcpy(table, exit_event_progs_table, sizeof(exit_event_progs_table));
+	return table;
+}
+
+static ttm_progs_t ttm_progs_table[TTM_MAX] = {
         [TTM_CONNECT] = {{"connect_e"},
                          {{"ia32_compat_connect_e", "__ia32_compat_sys_connect"},
                           {"ia32_connect_e", "__ia32_sys_connect"}}},
@@ -205,9 +214,27 @@ ttm_progs_t ttm_progs_table[TTM_MAX] = {
                           {"ia32_openat2_e", "__ia32_sys_openat2"}}},
 };
 
+ttm_progs_t *init_ttm_progs_table() {
+	ttm_progs_t *table = malloc(sizeof(ttm_progs_t) * TTM_MAX);
+	if(!table) {
+		return NULL;
+	}
+	memcpy(table, ttm_progs_table, sizeof(ttm_progs_table));
+	return table;
+}
+
 #ifdef BPF_ITERATOR_SUPPORT
-iter_prog_t iter_progs_table[ITER_PROG_MAX] = {
-        [ITER_PROG_DUMP_TASK] = {"dump_task", &g_state.is_tasks_dumping_supported},
-        [ITER_PROG_DUMP_TASK_FILE] = {"dump_task_file", &g_state.is_task_files_dumping_supported},
+static iter_prog_t iter_progs_table[ITER_PROG_MAX] = {
+        [ITER_PROG_DUMP_TASK] = {"dump_task", false},
+        [ITER_PROG_DUMP_TASK_FILE] = {"dump_task_file", false},
 };
+
+iter_prog_t *init_iter_progs_table() {
+	iter_prog_t *table = malloc(sizeof(iter_prog_t) * ITER_PROG_MAX);
+	if(!table) {
+		return NULL;
+	}
+	memcpy(table, iter_progs_table, sizeof(iter_progs_table));
+	return table;
+}
 #endif /* BPF_ITERATOR_SUPPORT */

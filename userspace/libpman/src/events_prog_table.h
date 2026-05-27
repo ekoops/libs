@@ -32,8 +32,7 @@ typedef struct {
 // Maximum number of programs to be tried (requiring bpf feat checks) for each event
 #define MAX_FEATURE_CHECKS 3
 
-// Defined in events_prog_table.c
-extern event_prog_t exit_event_progs_table[PPM_EVENT_MAX][MAX_FEATURE_CHECKS];
+event_prog_t *init_exit_event_progs_table();
 
 // 64-bit system call TOCTOU mitigation program info.
 typedef struct {
@@ -58,20 +57,16 @@ typedef struct {
 
 enum ttm_sc_code { TTM_CONNECT, TTM_CREAT, TTM_OPEN, TTM_OPENAT, TTM_OPENAT2, TTM_MAX };
 
-// Defined in events_prog_table.c
-extern ttm_progs_t ttm_progs_table[TTM_MAX];
+ttm_progs_t *init_ttm_progs_table();
 
 #ifdef BPF_ITERATOR_SUPPORT
 typedef struct {
 	// The eBPF program name.
 	char *name;
-	// Pointer to the boolean flag, in `g_state`, that must be set to indicate if the current
-	// machine provides support for this program.
-	bool *feature_flag;
+	bool is_supported;
 } iter_prog_t;
 
 enum iter_prog_code { ITER_PROG_DUMP_TASK, ITER_PROG_DUMP_TASK_FILE, ITER_PROG_MAX };
 
-// Defined in events_prog_table.c
-extern iter_prog_t iter_progs_table[ITER_PROG_MAX];
+iter_prog_t *init_iter_progs_table();
 #endif  // BPF_ITERATOR_SUPPORT

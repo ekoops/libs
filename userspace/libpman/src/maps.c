@@ -24,7 +24,7 @@ limitations under the License.
 #include <libscap/scap.h>
 
 /* Some exit events can require more than one bpf program to collect all the data. */
-static const char* sys_exit_extra_event_names[SYS_EXIT_EXTRA_CODE_MAX] = {
+static const char *sys_exit_extra_event_names[SYS_EXIT_EXTRA_CODE_MAX] = {
         [T1_EXECVE_X] = "t1_execve_x",
         [T1_EXECVEAT_X] = "t1_execveat_x",
         [T1_CLONE_X] = "t1_clone_x",
@@ -51,37 +51,37 @@ extern const int g_ia32_64_map[];
 /// TODO: in a future optimization we can think to remove this table,
 /// defining macros for `nparams` and directly use them inside bpf
 /// programs instead of reading from a map.
-static void fill_event_params_table() {
+static void fill_event_params_table(const struct internal_state *state) {
 	uint8_t nparams_event = 0;
 
 	for(int j = 0; j < PPM_EVENT_MAX; ++j) {
 		nparams_event = (uint8_t)g_event_info[j].nparams;
-		g_state.skel->rodata->g_event_params_table[j] = nparams_event;
+		state->skel->rodata->g_event_params_table[j] = nparams_event;
 	}
 }
 
-static void fill_ppm_sc_table() {
+static void fill_ppm_sc_table(const struct internal_state *state) {
 	for(int j = 0; j < SYSCALL_TABLE_SIZE; ++j) {
-		g_state.skel->rodata->g_ppm_sc_table[j] = (uint16_t)g_syscall_table[j].ppm_sc;
+		state->skel->rodata->g_ppm_sc_table[j] = (uint16_t)g_syscall_table[j].ppm_sc;
 	}
 }
 
-uint64_t pman_get_probe_api_ver() {
-	return g_state.skel->rodata->probe_api_ver;
+uint64_t pman_get_probe_api_ver(const struct internal_state *state) {
+	return state->skel->rodata->probe_api_ver;
 }
 
-uint64_t pman_get_probe_schema_ver() {
-	return g_state.skel->rodata->probe_schema_var;
+uint64_t pman_get_probe_schema_ver(const struct internal_state *state) {
+	return state->skel->rodata->probe_schema_var;
 }
 
 /*=============================== BPF READ-ONLY GLOBAL VARIABLES ===============================*/
 
 /*=============================== BPF GLOBAL VARIABLES ===============================*/
 
-static int get_capture_settings(struct capture_settings* settings) {
+int get_capture_settings(const struct internal_state *state, struct capture_settings *settings) {
 	int last_errno;
 
-	const int fd = bpf_map__fd(g_state.skel->maps.capture_settings);
+	const int fd = bpf_map__fd(state->skel->maps.capture_settings);
 	if(fd < 0) {
 		last_errno = errno;
 		log_errorf("unable to get capture_settings map fd!");
@@ -98,10 +98,11 @@ static int get_capture_settings(struct capture_settings* settings) {
 	return 0;
 }
 
-static int update_capture_settings(struct capture_settings* settings) {
+int update_capture_settings(const struct internal_state *state,
+                            const struct capture_settings *settings) {
 	int last_errno;
 
-	const int fd = bpf_map__fd(g_state.skel->maps.capture_settings);
+	const int fd = bpf_map__fd(state->skel->maps.capture_settings);
 	if(fd < 0) {
 		last_errno = errno;
 		log_errorf("unable to get capture_settings map fd!");
@@ -118,117 +119,120 @@ static int update_capture_settings(struct capture_settings* settings) {
 	return 0;
 }
 
-void pman_set_snaplen(uint32_t desired_snaplen) {
+void pman_set_snaplen(const struct internal_state *state, const uint32_t desired_snaplen) {
 	struct capture_settings settings;
-	if(get_capture_settings(&settings) != 0) {
+	if(get_capture_settings(state, &settings) != 0) {
 		return;
 	}
 	settings.snaplen = desired_snaplen;
-	update_capture_settings(&settings);
+	update_capture_settings(state, &settings);
 }
 
-void pman_set_boot_time(uint64_t boot_time) {
+void pman_set_boot_time(const struct internal_state *state, const uint64_t boot_time) {
 	struct capture_settings settings;
-	if(get_capture_settings(&settings) != 0) {
+	if(get_capture_settings(state, &settings) != 0) {
 		return;
 	}
 	settings.boot_time = boot_time;
-	update_capture_settings(&settings);
+	update_capture_settings(state, &settings);
 }
 
-void pman_set_dropping_mode(bool value) {
+void pman_set_dropping_mode(const struct internal_state *state, const bool value) {
 	struct capture_settings settings;
-	if(get_capture_settings(&settings) != 0) {
+	if(get_capture_settings(state, &settings) != 0) {
 		return;
 	}
 	settings.dropping_mode = value;
-	update_capture_settings(&settings);
+	update_capture_settings(state, &settings);
 }
 
-void pman_set_sampling_ratio(uint32_t value) {
+void pman_set_sampling_ratio(const struct internal_state *state, const uint32_t value) {
 	struct capture_settings settings;
-	if(get_capture_settings(&settings) != 0) {
+	if(get_capture_settings(state, &settings) != 0) {
 		return;
 	}
 	settings.sampling_ratio = value;
-	update_capture_settings(&settings);
+	update_capture_settings(state, &settings);
 }
 
-void pman_set_drop_failed(bool drop_failed) {
+void pman_set_drop_failed(const struct internal_state *state, const bool drop_failed) {
 	struct capture_settings settings;
-	if(get_capture_settings(&settings) != 0) {
+	if(get_capture_settings(state, &settings) != 0) {
 		return;
 	}
 	settings.drop_failed = drop_failed;
-	update_capture_settings(&settings);
+	update_capture_settings(state, &settings);
 }
 
-void pman_set_do_dynamic_snaplen(bool do_dynamic_snaplen) {
+void pman_set_do_dynamic_snaplen(const struct internal_state *state,
+                                 const bool do_dynamic_snaplen) {
 	struct capture_settings settings;
-	if(get_capture_settings(&settings) != 0) {
+	if(get_capture_settings(state, &settings) != 0) {
 		return;
 	}
 	settings.do_dynamic_snaplen = do_dynamic_snaplen;
-	update_capture_settings(&settings);
+	update_capture_settings(state, &settings);
 }
 
-void pman_set_fullcapture_port_range(uint16_t range_start, uint16_t range_end) {
+void pman_set_fullcapture_port_range(const struct internal_state *state,
+                                     const uint16_t range_start,
+                                     const uint16_t range_end) {
 	struct capture_settings settings;
-	if(get_capture_settings(&settings) != 0) {
+	if(get_capture_settings(state, &settings) != 0) {
 		return;
 	}
 	settings.fullcapture_port_range_start = range_start;
 	settings.fullcapture_port_range_end = range_end;
-	update_capture_settings(&settings);
+	update_capture_settings(state, &settings);
 }
 
-void pman_set_statsd_port(uint16_t statsd_port) {
+void pman_set_statsd_port(const struct internal_state *state, const uint16_t statsd_port) {
 	struct capture_settings settings;
-	if(get_capture_settings(&settings) != 0) {
+	if(get_capture_settings(state, &settings) != 0) {
 		return;
 	}
 	settings.statsd_port = statsd_port;
-	update_capture_settings(&settings);
+	update_capture_settings(state, &settings);
 }
 
-void pman_set_scap_tid(int32_t scap_tid) {
+void pman_set_scap_tid(const struct internal_state *state, const int32_t scap_tid) {
 	struct capture_settings settings;
-	if(get_capture_settings(&settings) != 0) {
+	if(get_capture_settings(state, &settings) != 0) {
 		return;
 	}
 	settings.scap_tid = scap_tid;
-	update_capture_settings(&settings);
+	update_capture_settings(state, &settings);
 }
 
-static void fill_syscall_sampling_table() {
+static void fill_syscall_sampling_table(const struct internal_state *state) {
 	for(int syscall_id = 0; syscall_id < SYSCALL_TABLE_SIZE; syscall_id++) {
 		if(g_syscall_table[syscall_id].flags & UF_NEVER_DROP) {
-			g_state.skel->rodata->g_64bit_sampling_syscall_table[syscall_id] = UF_NEVER_DROP;
+			state->skel->rodata->g_64bit_sampling_syscall_table[syscall_id] = UF_NEVER_DROP;
 			continue;
 		}
 
 		/* Syscalls with `g_syscall_table[syscall_id].flags == UF_NONE` are the generic ones */
 		if(g_syscall_table[syscall_id].flags & UF_ALWAYS_DROP ||
 		   g_syscall_table[syscall_id].flags == UF_NONE) {
-			g_state.skel->rodata->g_64bit_sampling_syscall_table[syscall_id] = UF_ALWAYS_DROP;
+			state->skel->rodata->g_64bit_sampling_syscall_table[syscall_id] = UF_ALWAYS_DROP;
 			continue;
 		}
 
 		if(g_syscall_table[syscall_id].flags & UF_USED) {
-			g_state.skel->rodata->g_64bit_sampling_syscall_table[syscall_id] = 0;
+			state->skel->rodata->g_64bit_sampling_syscall_table[syscall_id] = 0;
 			continue;
 		}
 	}
 }
 
-static void fill_ia32_to_64_table() {
+static void fill_ia32_to_64_table(const struct internal_state *state) {
 	for(int syscall_id = 0; syscall_id < SYSCALL_TABLE_SIZE; syscall_id++) {
 		// Note: we will map all syscalls from the upper limit of the ia32 table
 		// up to SYSCALL_TABLE_SIZE to 0 (because they are not set in the g_ia32_64_map).
 		// 0 is read on x86_64; this is not a problem though because
 		// we will never receive a 32bit syscall above the upper limit, since it won't be existent.
 		const int x64_val = g_ia32_64_map[syscall_id];
-		g_state.skel->rodata->g_ia32_to_64_table[syscall_id] = x64_val;
+		state->skel->rodata->g_ia32_to_64_table[syscall_id] = x64_val;
 	}
 }
 
@@ -236,9 +240,12 @@ static void fill_ia32_to_64_table() {
 
 /*=============================== BPF_MAP_TYPE_PROG_ARRAY ===============================*/
 
-static int add_bpf_program_to_tail_table(int tail_table_fd, const char* bpf_prog_name, int key) {
-	struct bpf_program* bpf_prog =
-	        bpf_object__find_program_by_name(g_state.skel->obj, bpf_prog_name);
+static int add_bpf_program_to_tail_table(const struct internal_state *state,
+                                         int tail_table_fd,
+                                         const char *bpf_prog_name,
+                                         int key) {
+	struct bpf_program *bpf_prog =
+	        bpf_object__find_program_by_name(state->skel->obj, bpf_prog_name);
 	if(!bpf_prog) {
 		log_msgf(FALCOSECURITY_LOG_SEV_DEBUG, "unable to find BPF program '%s'", bpf_prog_name);
 
@@ -277,8 +284,8 @@ static int add_bpf_program_to_tail_table(int tail_table_fd, const char* bpf_prog
  *
  * @return `0` on success, `errno` in case of error.
  */
-static int fill_syscalls_tail_table() {
-	const int syscall_exit_tail_table_fd = bpf_map__fd(g_state.skel->maps.syscall_exit_tail_table);
+static int fill_syscalls_tail_table(const struct internal_state *state) {
+	const int syscall_exit_tail_table_fd = bpf_map__fd(state->skel->maps.syscall_exit_tail_table);
 	if(syscall_exit_tail_table_fd < 0) {
 		const int last_errno = errno;
 		log_errorf("unable to get the syscall exit tail table");
@@ -301,13 +308,16 @@ static int fill_syscalls_tail_table() {
 		 * as generic events. We need to remove this workaround when all syscalls will be
 		 * implemented.
 		 */
-		const event_prog_t* exit_prog =
-		        (const event_prog_t*)&exit_event_progs_table[exit_event_type];
+		const event_prog_t *exit_prog =
+		        (const event_prog_t *)&state->exit_event_progs_table[exit_event_type];
 		if(exit_prog->name == NULL) {
-			exit_prog = (const event_prog_t*)&exit_event_progs_table[PPME_GENERIC_X];
+			exit_prog = (const event_prog_t *)&state->exit_event_progs_table[PPME_GENERIC_X];
 		}
 
-		if(add_bpf_program_to_tail_table(syscall_exit_tail_table_fd, exit_prog->name, syscall_id)) {
+		if(add_bpf_program_to_tail_table(state,
+		                                 syscall_exit_tail_table_fd,
+		                                 exit_prog->name,
+		                                 syscall_id)) {
 			return errno;
 		}
 	}
@@ -325,16 +335,16 @@ static int fill_syscalls_tail_table() {
  *
  * @return `0` on success, `errno` in case of error.
  */
-static int fill_syscall_exit_extra_tail_table() {
+static int fill_syscall_exit_extra_tail_table(const struct internal_state *state) {
 	const int extra_sys_exit_tail_table_fd =
-	        bpf_map__fd(g_state.skel->maps.syscall_exit_extra_tail_table);
+	        bpf_map__fd(state->skel->maps.syscall_exit_extra_tail_table);
 	if(extra_sys_exit_tail_table_fd < 0) {
 		const int last_errno = errno;
 		log_errorf("unable to get the extra sys exit tail table");
 		return last_errno;
 	}
 
-	const char* tail_prog_name = NULL;
+	const char *tail_prog_name = NULL;
 	for(int j = 0; j < SYS_EXIT_EXTRA_CODE_MAX; j++) {
 		tail_prog_name = sys_exit_extra_event_names[j];
 		if(!tail_prog_name) {
@@ -342,7 +352,7 @@ static int fill_syscall_exit_extra_tail_table() {
 			return EINVAL;
 		}
 
-		if(add_bpf_program_to_tail_table(extra_sys_exit_tail_table_fd, tail_prog_name, j)) {
+		if(add_bpf_program_to_tail_table(state, extra_sys_exit_tail_table_fd, tail_prog_name, j)) {
 			return errno;
 		}
 	}
@@ -353,8 +363,8 @@ static int fill_syscall_exit_extra_tail_table() {
 
 /*=============================== BPF_MAP_TYPE_ARRAY ===============================*/
 
-static int fill_interesting_syscalls_table_64bit() {
-	const int fd = bpf_map__fd(g_state.skel->maps.interesting_syscalls_table_64bit);
+static int fill_interesting_syscalls_table_64bit(const struct internal_state *state) {
+	const int fd = bpf_map__fd(state->skel->maps.interesting_syscalls_table_64bit);
 	for(uint32_t i = 0; i < SYSCALL_TABLE_SIZE; i++) {
 		const bool interesting = false;
 		if(bpf_map_update_elem(fd, &i, &interesting, BPF_ANY) < 0) {
@@ -366,8 +376,10 @@ static int fill_interesting_syscalls_table_64bit() {
 	return 0;
 }
 
-int pman_mark_single_64bit_syscall(int syscall_id, bool interesting) {
-	const int fd = bpf_map__fd(g_state.skel->maps.interesting_syscalls_table_64bit);
+int pman_mark_single_64bit_syscall(const struct internal_state *state,
+                                   int syscall_id,
+                                   bool interesting) {
+	const int fd = bpf_map__fd(state->skel->maps.interesting_syscalls_table_64bit);
 	if(bpf_map_update_elem(fd, &syscall_id, &interesting, BPF_ANY) < 0) {
 		const int last_errno = errno;
 		log_errorf("unable to set interesting syscall at index %d as %d!", syscall_id, interesting);
@@ -376,7 +388,7 @@ int pman_mark_single_64bit_syscall(int syscall_id, bool interesting) {
 	return 0;
 }
 
-static int size_auxiliary_maps(const struct bpf_probe* probe, const uint32_t max_entries) {
+static int size_auxiliary_maps(const struct bpf_probe *probe, const uint32_t max_entries) {
 	if(bpf_map__set_max_entries(probe->maps.auxiliary_maps, max_entries)) {
 		const int last_errno = errno;
 		log_errorf("unable to set max entries for 'auxiliary_maps' to %d", max_entries);
@@ -385,7 +397,7 @@ static int size_auxiliary_maps(const struct bpf_probe* probe, const uint32_t max
 	return 0;
 }
 
-static int size_counter_maps(const struct bpf_probe* probe, const uint32_t max_entries) {
+static int size_counter_maps(const struct bpf_probe *probe, const uint32_t max_entries) {
 	if(bpf_map__set_max_entries(probe->maps.counter_maps, max_entries)) {
 		log_errorf("unable to set max entries for 'counter_maps' to %d", max_entries);
 		return errno;
@@ -398,50 +410,49 @@ static int size_counter_maps(const struct bpf_probe* probe, const uint32_t max_e
 /* Here we split maps operations, before and after the loading phase.
  */
 
-int pman_prepare_maps_before_loading() {
+int pman_prepare_maps_before_loading(const struct internal_state *state) {
 	/* Read-only global variables must be set before loading phase. */
-	fill_event_params_table();
-	fill_ppm_sc_table();
-	fill_ia32_to_64_table();
-	fill_syscall_sampling_table();
+	fill_event_params_table(state);
+	fill_ppm_sc_table(state);
+	fill_ia32_to_64_table(state);
+	fill_syscall_sampling_table(state);
 
 	/* We need to set the entries number for every BPF_MAP_TYPE_ARRAY. The number of entries will be
 	 * always equal to the CPUs number, even if some of them are not online.
 	 */
-	int err = size_auxiliary_maps(g_state.skel, g_state.n_possible_cpus);
-	err = err ?: size_counter_maps(g_state.skel, g_state.n_possible_cpus);
+	int err = size_auxiliary_maps(state->skel, state->n_possible_cpus);
+	err = err ?: size_counter_maps(state->skel, state->n_possible_cpus);
 	return err;
 }
 
 #ifdef BPF_ITERATOR_SUPPORT
 // Variant of `pman_prepare_maps_before_loading()` used for testing BPF iterator programs support.
-int iter_support_probing__prepare_maps_before_loading(struct iter_support_probing_ctx* ctx) {
+int iter_support_probing__prepare_maps_before_loading(struct iter_support_probing_ctx *ctx) {
 	int err = size_auxiliary_maps(ctx->probe, 1);
 	err = err ?: size_counter_maps(ctx->probe, 1);
 	return err;
 }
 #endif  // BPF_ITERATOR_SUPPORT
 
-int pman_finalize_maps_after_loading() {
-	int err;
-	struct capture_settings settings = {};
-	err = update_capture_settings(&settings);
+int pman_finalize_maps_after_loading(const struct internal_state *state) {
+	const struct capture_settings settings = {};
+	int err = update_capture_settings(state, &settings);
 	if(err != 0) {
 		return err;
 	}
 
 	/* set bpf global variables. */
-	pman_set_snaplen(80);
-	pman_set_dropping_mode(false);
-	pman_set_sampling_ratio(1);
-	pman_set_drop_failed(false);
-	pman_set_do_dynamic_snaplen(false);
-	pman_set_fullcapture_port_range(0, 0);
-	pman_set_statsd_port(PPM_PORT_STATSD);
+	pman_set_snaplen(state, 80);
+	pman_set_dropping_mode(state, false);
+	pman_set_sampling_ratio(state, 1);
+	pman_set_drop_failed(state, false);
+	pman_set_do_dynamic_snaplen(state, false);
+	pman_set_fullcapture_port_range(state, 0, 0);
+	pman_set_statsd_port(state, PPM_PORT_STATSD);
 
 	/* We have to fill all ours tail tables. */
-	fill_interesting_syscalls_table_64bit();
-	err = fill_syscalls_tail_table();
-	err = err ?: fill_syscall_exit_extra_tail_table();
+	fill_interesting_syscalls_table_64bit(state);
+	err = fill_syscalls_tail_table(state);
+	err = err ?: fill_syscall_exit_extra_tail_table(state);
 	return err;
 }

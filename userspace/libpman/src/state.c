@@ -23,8 +23,6 @@ limitations under the License.
 #include <unistd.h>
 #include "state.h"
 
-struct internal_state g_state = {};
-
 static void log_msg_v(const enum falcosecurity_log_severity level, const char* fmt, va_list args) {
 	if(!fmt) {
 		return;
@@ -46,8 +44,8 @@ static void log_msg_v(const enum falcosecurity_log_severity level, const char* f
 		snprintf(buf + offset, sizeof(buf) - offset, " (errno: %d | message: %s)", errno, err_str);
 	}
 
-	if(g_state.log_fn != NULL) {
-		g_state.log_fn("libpman", buf, level);
+	if(state->log_fn != NULL) {
+		state->log_fn("libpman", buf, level);
 	} else {
 		fprintf(stderr, "libpman: %s\n", buf);
 	}

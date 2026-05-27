@@ -820,28 +820,30 @@ cleanup:
 	return res;
 }
 
-static void fill_dump_task_prog_info(struct prog_info *info) {
-	info->link = &g_state.skel->links.dump_task;
-	info->prog = g_state.skel->progs.dump_task;
+static void fill_dump_task_prog_info(const struct internal_state *state, struct prog_info *info) {
+	info->link = &state->skel->links.dump_task;
+	info->prog = state->skel->progs.dump_task;
 	info->name = "dump_task";
 	info->selector = EHS_TASK;
 }
 
-static void fill_dump_task_file_prog_info(struct prog_info *info) {
-	info->link = &g_state.skel->links.dump_task_file;
-	info->prog = g_state.skel->progs.dump_task_file;
+static void fill_dump_task_file_prog_info(const struct internal_state *state,
+                                          struct prog_info *info) {
+	info->link = &state->skel->links.dump_task_file;
+	info->prog = state->skel->progs.dump_task_file;
 	info->name = "dump_task_file";
 	info->selector = EHS_TASK_FILE;
 }
 
-int32_t pman_iter_fetch_task(const struct scap_fetch_callbacks *callbacks,
+int32_t pman_iter_fetch_task(const struct internal_state *state,
+                             const struct scap_fetch_callbacks *callbacks,
                              const uint32_t tid,
                              scap_threadinfo **tinfo,
                              char *error) {
 #ifndef BPF_ITERATOR_SUPPORT
 	return SCAP_NOT_SUPPORTED;
 #else
-	if(!g_state.is_tasks_dumping_supported) {
+	if(!state->is_tasks_dumping_supported) {
 		return SCAP_NOT_SUPPORTED;
 	}
 
@@ -850,33 +852,36 @@ int32_t pman_iter_fetch_task(const struct scap_fetch_callbacks *callbacks,
 	}
 
 	struct prog_info prog_info;
-	fill_dump_task_prog_info(&prog_info);
+	fill_dump_task_prog_info(state, &prog_info);
 	return fetch(&prog_info, callbacks, 0, tid, tinfo, false, NULL, error);
 #endif
 }
 
-int32_t pman_iter_fetch_tasks(const struct scap_fetch_callbacks *callbacks, char *error) {
+int32_t pman_iter_fetch_tasks(const struct internal_state *state,
+                              const struct scap_fetch_callbacks *callbacks,
+                              char *error) {
 #ifndef BPF_ITERATOR_SUPPORT
 	return SCAP_NOT_SUPPORTED;
 #else
-	if(!g_state.is_tasks_dumping_supported) {
+	if(!state->is_tasks_dumping_supported) {
 		return SCAP_NOT_SUPPORTED;
 	}
 
 	struct prog_info prog_info;
-	fill_dump_task_prog_info(&prog_info);
+	fill_dump_task_prog_info(state, &prog_info);
 	return fetch(&prog_info, callbacks, 0, 0, NULL, false, NULL, error);
 #endif
 }
 
-int32_t pman_iter_fetch_proc_file(const struct scap_fetch_callbacks *callbacks,
+int32_t pman_iter_fetch_proc_file(const struct internal_state *state,
+                                  const struct scap_fetch_callbacks *callbacks,
                                   const uint32_t pid,
                                   const uint32_t fd,
                                   char *error) {
 #ifndef BPF_ITERATOR_SUPPORT
 	return SCAP_NOT_SUPPORTED;
 #else
-	if(!g_state.is_task_files_dumping_supported) {
+	if(!state->is_task_files_dumping_supported) {
 		return SCAP_NOT_SUPPORTED;
 	}
 
@@ -885,16 +890,17 @@ int32_t pman_iter_fetch_proc_file(const struct scap_fetch_callbacks *callbacks,
 	}
 
 	const bool must_fetch_sockets = true;
-	g_state.skel->data->dump_task_file__fd_filter = (int64_t)fd;
-	g_state.skel->data->dump_task_file__must_dump_sockets = must_fetch_sockets;
+	state->skel->data->dump_task_file__fd_filter = (int64_t)fd;
+	state->skel->data->dump_task_file__must_dump_sockets = must_fetch_sockets;
 
 	struct prog_info prog_info;
-	fill_dump_task_file_prog_info(&prog_info);
+	fill_dump_task_file_prog_info(state, &prog_info);
 	return fetch(&prog_info, callbacks, pid, 0, NULL, must_fetch_sockets, NULL, error);
 #endif
 }
 
-int32_t pman_iter_fetch_proc_files(const struct scap_fetch_callbacks *callbacks,
+int32_t pman_iter_fetch_proc_files(const struct internal_state *state,
+                                   const struct scap_fetch_callbacks *callbacks,
                                    const uint32_t pid,
                                    const bool must_fetch_sockets,
                                    uint64_t *num_files_fetched,
@@ -902,7 +908,7 @@ int32_t pman_iter_fetch_proc_files(const struct scap_fetch_callbacks *callbacks,
 #ifndef BPF_ITERATOR_SUPPORT
 	return SCAP_NOT_SUPPORTED;
 #else
-	if(!g_state.is_task_files_dumping_supported) {
+	if(!state->is_task_files_dumping_supported) {
 		return SCAP_NOT_SUPPORTED;
 	}
 
@@ -910,29 +916,31 @@ int32_t pman_iter_fetch_proc_files(const struct scap_fetch_callbacks *callbacks,
 		return scap_errprintf(error, 0, "expected positive process id, got: %u", pid);
 	}
 
-	g_state.skel->data->dump_task_file__fd_filter = (int64_t)-1;
-	g_state.skel->data->dump_task_file__must_dump_sockets = must_fetch_sockets;
+	state->skel->data->dump_task_file__fd_filter = (int64_t)-1;
+	state->skel->data->dump_task_file__must_dump_sockets = must_fetch_sockets;
 
 	struct prog_info prog_info;
-	fill_dump_task_file_prog_info(&prog_info);
+	fill_dump_task_file_prog_info(state, &prog_info);
 	return fetch(&prog_info, callbacks, pid, 0, NULL, must_fetch_sockets, num_files_fetched, error);
 #endif
 }
 
-int32_t pman_iter_fetch_procs_files(const struct scap_fetch_callbacks *callbacks, char *error) {
+int32_t pman_iter_fetch_procs_files(const struct internal_state *state,
+                                    const struct scap_fetch_callbacks *callbacks,
+                                    char *error) {
 #ifndef BPF_ITERATOR_SUPPORT
 	return SCAP_NOT_SUPPORTED;
 #else
-	if(!g_state.is_task_files_dumping_supported) {
+	if(!state->is_task_files_dumping_supported) {
 		return SCAP_NOT_SUPPORTED;
 	}
 
 	const bool must_fetch_sockets = true;
-	g_state.skel->data->dump_task_file__fd_filter = (int64_t)-1;
-	g_state.skel->data->dump_task_file__must_dump_sockets = must_fetch_sockets;
+	state->skel->data->dump_task_file__fd_filter = (int64_t)-1;
+	state->skel->data->dump_task_file__must_dump_sockets = must_fetch_sockets;
 
 	struct prog_info prog_info;
-	fill_dump_task_file_prog_info(&prog_info);
+	fill_dump_task_file_prog_info(state, &prog_info);
 	return fetch(&prog_info, callbacks, 0, 0, NULL, must_fetch_sockets, NULL, error);
 #endif
 }

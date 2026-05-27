@@ -21,18 +21,18 @@ limitations under the License.
 #include "events_prog_table.h"
 #include "support_probing.h"
 
-int pman_open_probe() {
-	g_state.skel = bpf_probe__open();
-	if(!g_state.skel) {
+int pman_open_probe(struct internal_state *state) {
+	state->skel = bpf_probe__open();
+	if(!state->skel) {
 		log_errorf("failed to open BPF skeleton");
 		return errno;
 	}
 	return 0;
 }
 
-static void disable_prog_autoloading(const char *prog_name) {
+static void disable_prog_autoloading(const struct internal_state *state, const char *prog_name) {
 	log_msgf(FALCOSECURITY_LOG_SEV_DEBUG, "disabling BPF program '%s'", prog_name);
-	struct bpf_program *p = bpf_object__find_program_by_name(g_state.skel->obj, prog_name);
+	struct bpf_program *p = bpf_object__find_program_by_name(state->skel->obj, prog_name);
 	if(!p || bpf_program__set_autoload(p, false) < 0) {
 		log_errorf("failed to disable prog '%s'", prog_name);
 		return;
@@ -55,26 +55,23 @@ static bool is_kernel_symbol_available(const char *symbol) {
 }
 
 #ifdef BPF_ITERATOR_SUPPORT
-static void prepare_iter_progs_before_loading() {
+static void prepare_iter_progs_before_loading(struct internal_state *state) {
 	// Disable autoloading for unsupported iterator programs.
 	for(int i = 0; i < ITER_PROG_MAX; i++) {
-		const iter_prog_t *iter_prog = &iter_progs_table[i];
+		iter_prog_t *iter_prog = &state->iter_progs_table[i];
 		const char *prog_name = iter_prog->name;
-		const bool is_prog_supported = iter_support_probing__probe(prog_name) == 0;
-		if(!is_prog_supported) {
+		iter_prog->is_supported = iter_support_probing__probe(prog_name) == 0;
+		if(!iter_prog->is_supported) {
 			log_msgf(FALCOSECURITY_LOG_SEV_DEBUG, "unsupported BPF program '%s'", prog_name);
-			disable_prog_autoloading(prog_name);
+			disable_prog_autoloading(state, prog_name);
 		} else {
 			log_msgf(FALCOSECURITY_LOG_SEV_DEBUG, "supported BPF program '%s'", prog_name);
 		}
-
-		// Update the corresponding feature flag in `g_state`.
-		*iter_prog->feature_flag = is_prog_supported;
 	}
 }
 #endif
 
-int pman_prepare_progs_before_loading() {
+int pman_prepare_progs_before_loading(struct internal_state *state) {
 	/*
 	 * Probe required features for each bpf program, as requested
 	 */
@@ -85,7 +82,7 @@ int pman_prepare_progs_before_loading() {
 		if(PPME_IS_ENTER(ev)) {
 			continue;
 		}
-		event_prog_t *progs = exit_event_progs_table[ev];
+		event_prog_t *progs = state->exit_event_progs_table[ev];
 		int idx, chosen_idx = -1;
 		for(idx = 0; idx < MAX_FEATURE_CHECKS && progs[idx].name != NULL; idx++) {
 			bool should_disable = chosen_idx != -1;
@@ -111,7 +108,7 @@ int pman_prepare_progs_before_loading() {
 
 			// Disable autoloading for all programs except chosen one
 			if(should_disable) {
-				disable_prog_autoloading(progs[idx].name);
+				disable_prog_autoloading(state, progs[idx].name);
 			}
 		}
 
@@ -140,7 +137,7 @@ int pman_prepare_progs_before_loading() {
 	// Keep autoloading enabled for all TOCTOU mitigation 64 bit programs.
 	// Disable autoloading for unsupported TOCTOU mitigation ia-32 programs.
 	for(int i = 0; i < TTM_MAX; i++) {
-		const ttm_ia32_prog_t *ia32_progs = ttm_progs_table[i].ttm_ia32_progs;
+		const ttm_ia32_prog_t *ia32_progs = state->ttm_progs_table[i].ttm_ia32_progs;
 		int chosen_idx = -1;
 		for(int j = 0; j < TTM_IA32_PROGS_NUM; j++) {
 			const ttm_ia32_prog_t *ia32_prog = &ia32_progs[j];
@@ -163,13 +160,13 @@ int pman_prepare_progs_before_loading() {
 			}
 			// Disable autoloading for all programs except chosen one.
 			if(should_disable) {
-				disable_prog_autoloading(ia32_prog->name);
+				disable_prog_autoloading(state, ia32_prog->name);
 			}
 		}
 	}
 
 #ifdef BPF_ITERATOR_SUPPORT
-	prepare_iter_progs_before_loading();
+	prepare_iter_progs_before_loading(state);
 #endif
 
 	return 0;
@@ -183,100 +180,104 @@ static int bpf_prog_fd_or_default(const struct bpf_program *prog) {
 	return fd;
 }
 
-static void save_attached_progs() {
-	g_state.attached_progs_fds[0] = bpf_prog_fd_or_default(g_state.skel->progs.sys_exit);
-	g_state.attached_progs_fds[1] = bpf_prog_fd_or_default(g_state.skel->progs.sched_proc_exit);
-	g_state.attached_progs_fds[2] = bpf_prog_fd_or_default(g_state.skel->progs.sched_switch);
-	g_state.attached_progs_fds[3] = bpf_prog_fd_or_default(g_state.skel->progs.sched_p_exec);
+static void save_attached_progs(struct internal_state *state) {
+	state->attached_progs_fds[0] = bpf_prog_fd_or_default(state->skel->progs.sys_exit);
+	state->attached_progs_fds[1] = bpf_prog_fd_or_default(state->skel->progs.sched_proc_exit);
+	state->attached_progs_fds[2] = bpf_prog_fd_or_default(state->skel->progs.sched_switch);
+	state->attached_progs_fds[3] = bpf_prog_fd_or_default(state->skel->progs.sched_p_exec);
 #ifdef CAPTURE_SCHED_PROC_FORK
-	g_state.attached_progs_fds[4] = bpf_prog_fd_or_default(g_state.skel->progs.sched_p_fork);
+	state->attached_progs_fds[4] = bpf_prog_fd_or_default(state->skel->progs.sched_p_fork);
 #endif
 #ifdef CAPTURE_PAGE_FAULTS
-	g_state.attached_progs_fds[5] = bpf_prog_fd_or_default(g_state.skel->progs.pf_user);
-	g_state.attached_progs_fds[6] = bpf_prog_fd_or_default(g_state.skel->progs.pf_kernel);
+	state->attached_progs_fds[5] = bpf_prog_fd_or_default(state->skel->progs.pf_user);
+	state->attached_progs_fds[6] = bpf_prog_fd_or_default(state->skel->progs.pf_kernel);
 #endif
-	g_state.attached_progs_fds[7] = bpf_prog_fd_or_default(g_state.skel->progs.signal_deliver);
-	g_state.attached_progs_fds[8] = bpf_prog_fd_or_default(g_state.skel->progs.connect_e);
-	g_state.attached_progs_fds[9] =
-	        bpf_prog_fd_or_default(g_state.skel->progs.ia32_compat_connect_e);
-	g_state.attached_progs_fds[10] = bpf_prog_fd_or_default(g_state.skel->progs.ia32_connect_e);
-	g_state.attached_progs_fds[11] = bpf_prog_fd_or_default(g_state.skel->progs.creat_e);
-	g_state.attached_progs_fds[12] =
-	        bpf_prog_fd_or_default(g_state.skel->progs.ia32_compat_creat_e);
-	g_state.attached_progs_fds[13] = bpf_prog_fd_or_default(g_state.skel->progs.ia32_creat_e);
-	g_state.attached_progs_fds[14] = bpf_prog_fd_or_default(g_state.skel->progs.open_e);
-	g_state.attached_progs_fds[15] = bpf_prog_fd_or_default(g_state.skel->progs.ia32_compat_open_e);
-	g_state.attached_progs_fds[16] = bpf_prog_fd_or_default(g_state.skel->progs.ia32_open_e);
-	g_state.attached_progs_fds[17] = bpf_prog_fd_or_default(g_state.skel->progs.openat_e);
-	g_state.attached_progs_fds[18] =
-	        bpf_prog_fd_or_default(g_state.skel->progs.ia32_compat_openat_e);
-	g_state.attached_progs_fds[19] = bpf_prog_fd_or_default(g_state.skel->progs.ia32_openat_e);
-	g_state.attached_progs_fds[20] = bpf_prog_fd_or_default(g_state.skel->progs.openat2_e);
-	g_state.attached_progs_fds[21] =
-	        bpf_prog_fd_or_default(g_state.skel->progs.ia32_compat_openat2_e);
-	g_state.attached_progs_fds[22] = bpf_prog_fd_or_default(g_state.skel->progs.ia32_openat2_e);
+	state->attached_progs_fds[7] = bpf_prog_fd_or_default(state->skel->progs.signal_deliver);
+	state->attached_progs_fds[8] = bpf_prog_fd_or_default(state->skel->progs.connect_e);
+	state->attached_progs_fds[9] = bpf_prog_fd_or_default(state->skel->progs.ia32_compat_connect_e);
+	state->attached_progs_fds[10] = bpf_prog_fd_or_default(state->skel->progs.ia32_connect_e);
+	state->attached_progs_fds[11] = bpf_prog_fd_or_default(state->skel->progs.creat_e);
+	state->attached_progs_fds[12] = bpf_prog_fd_or_default(state->skel->progs.ia32_compat_creat_e);
+	state->attached_progs_fds[13] = bpf_prog_fd_or_default(state->skel->progs.ia32_creat_e);
+	state->attached_progs_fds[14] = bpf_prog_fd_or_default(state->skel->progs.open_e);
+	state->attached_progs_fds[15] = bpf_prog_fd_or_default(state->skel->progs.ia32_compat_open_e);
+	state->attached_progs_fds[16] = bpf_prog_fd_or_default(state->skel->progs.ia32_open_e);
+	state->attached_progs_fds[17] = bpf_prog_fd_or_default(state->skel->progs.openat_e);
+	state->attached_progs_fds[18] = bpf_prog_fd_or_default(state->skel->progs.ia32_compat_openat_e);
+	state->attached_progs_fds[19] = bpf_prog_fd_or_default(state->skel->progs.ia32_openat_e);
+	state->attached_progs_fds[20] = bpf_prog_fd_or_default(state->skel->progs.openat2_e);
+	state->attached_progs_fds[21] =
+	        bpf_prog_fd_or_default(state->skel->progs.ia32_compat_openat2_e);
+	state->attached_progs_fds[22] = bpf_prog_fd_or_default(state->skel->progs.ia32_openat2_e);
 #ifdef BPF_ITERATOR_SUPPORT
-	g_state.attached_progs_fds[23] = bpf_prog_fd_or_default(g_state.skel->progs.dump_task);
-	g_state.attached_progs_fds[24] = bpf_prog_fd_or_default(g_state.skel->progs.dump_task_file);
+	state->attached_progs_fds[23] = bpf_prog_fd_or_default(state->skel->progs.dump_task);
+	state->attached_progs_fds[24] = bpf_prog_fd_or_default(state->skel->progs.dump_task_file);
 #endif
 }
 
-int pman_load_probe() {
-	if(bpf_probe__load(g_state.skel)) {
+int pman_load_probe(struct internal_state *state) {
+	if(bpf_probe__load(state->skel)) {
 		log_errorf("failed to load BPF object");
 		return errno;
 	}
-	save_attached_progs();
+	save_attached_progs(state);
 	// Programs are loaded so we passed the verifier we can free the 16 MB
-	if(g_state.log_buf) {
-		free(g_state.log_buf);
-		g_state.log_buf = NULL;
-		g_state.log_buf_size = 0;
+	if(state->log_buf) {
+		free(state->log_buf);
+		state->log_buf = NULL;
+		state->log_buf_size = 0;
 	}
 	return 0;
 }
 
-void pman_close_probe() {
-	if(g_state.stats) {
-		free(g_state.stats);
-		g_state.stats = NULL;
+void pman_close_probe(struct internal_state **state) {
+	if(!state || !*state) {
+		return;
 	}
 
-	if(g_state.inner_ringbuf_map_fd != -1) {
-		close(g_state.inner_ringbuf_map_fd);
-		g_state.inner_ringbuf_map_fd = -1;
+	struct internal_state *s = *state;
+	if(s->stats) {
+		free(s->stats);
+		s->stats = NULL;
+	}
+
+	if(s->inner_ringbuf_map_fd != -1) {
+		close(s->inner_ringbuf_map_fd);
+		s->inner_ringbuf_map_fd = -1;
 	}
 
 	for(int i = 0; i < MODERN_BPF_PROG_ATTACHED_MAX; i++) {
-		g_state.attached_progs_fds[i] = -1;
+		s->attached_progs_fds[i] = -1;
 	}
 
-	if(g_state.cons_pos) {
-		free(g_state.cons_pos);
-		g_state.cons_pos = NULL;
+	if(s->cons_pos) {
+		free(s->cons_pos);
+		s->cons_pos = NULL;
 	}
 
-	if(g_state.prod_pos) {
-		free(g_state.prod_pos);
-		g_state.prod_pos = NULL;
+	if(s->prod_pos) {
+		free(s->prod_pos);
+		s->prod_pos = NULL;
 	}
 
-	if(g_state.skel) {
-		bpf_probe__detach(g_state.skel);
-		bpf_probe__destroy(g_state.skel);
-		g_state.skel = NULL;
+	if(s->skel) {
+		bpf_probe__detach(s->skel);
+		bpf_probe__destroy(s->skel);
+		s->skel = NULL;
 	}
 
-	if(g_state.rb_manager) {
-		ring_buffer__free(g_state.rb_manager);
-		g_state.rb_manager = NULL;
+	if(s->rb_manager) {
+		ring_buffer__free(s->rb_manager);
+		s->rb_manager = NULL;
 	}
 
 #ifdef BPF_ITERATOR_SUPPORT
 
 	/* BPF iterators section */
-	g_state.is_tasks_dumping_supported = false;
-	g_state.is_task_files_dumping_supported = false;
+	s->is_tasks_dumping_supported = false;
+	s->is_task_files_dumping_supported = false;
 
 #endif /* BPF_ITERATOR_SUPPORT */
+
+	*state = NULL;
 }

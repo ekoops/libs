@@ -39,87 +39,122 @@ static int libbpf_print(enum libbpf_print_level level, const char *format, va_li
 		return -EINVAL;
 	}
 
-	if(g_state.log_fn == NULL)
+	if(state->log_fn == NULL)
 		return vfprintf(stderr, format, args);
 
 	// This should be already allocated by the caller, but if for some reason libbpf wants to log
 	// again after initialization we create a smaller buffer. We need a big buffer only for verifier
 	// logs at initialization time.
-	if(g_state.log_buf == NULL) {
-		g_state.log_buf_size = 0;
+	if(state->log_buf == NULL) {
+		state->log_buf_size = 0;
 		// this will be freed when the global state is destroyed.
-		g_state.log_buf = calloc(1, BPF_LOG_SMALL_BUF_SIZE);
-		if(g_state.log_buf == NULL)
+		state->log_buf = calloc(1, BPF_LOG_SMALL_BUF_SIZE);
+		if(state->log_buf == NULL)
 			return -ENOMEM;
-		g_state.log_buf_size = BPF_LOG_SMALL_BUF_SIZE;
+		state->log_buf_size = BPF_LOG_SMALL_BUF_SIZE;
 	}
-	int rc = vsnprintf(g_state.log_buf, g_state.log_buf_size, format, args);
+	int rc = vsnprintf(state->log_buf, state->log_buf_size, format, args);
 	if(rc < 0)
 		return rc;
 
 	// don't need a component name for libbpf, it will prepend "libbpf: " to logs for us
-	g_state.log_fn(NULL, g_state.log_buf, sev);
+	state->log_fn(NULL, state->log_buf, sev);
 	return rc;
 }
 
 /* Clear global state. */
-static void clear_state() {
-	g_state.skel = NULL;
-	g_state.rb_manager = NULL;
-	g_state.n_possible_cpus = 0;
-	g_state.n_interesting_cpus = 0;
-	g_state.allocate_online_only = false;
-	g_state.n_required_buffers = 0;
-	g_state.cpus_for_each_buffer = 0;
-	g_state.ringbuf_pos = 0;
-	g_state.cons_pos = NULL;
-	g_state.prod_pos = NULL;
-	g_state.inner_ringbuf_map_fd = -1;
-	g_state.buffer_bytes_dim = 0;
-	g_state.last_ring_read = -1;
-	g_state.last_event_size = 0;
+static void clear_state(struct internal_state *state) {
+	state->skel = NULL;
+	state->rb_manager = NULL;
+	state->n_possible_cpus = 0;
+	state->n_interesting_cpus = 0;
+	state->allocate_online_only = false;
+	state->n_required_buffers = 0;
+	state->cpus_for_each_buffer = 0;
+	state->ringbuf_pos = 0;
+	state->cons_pos = NULL;
+	state->prod_pos = NULL;
+	state->inner_ringbuf_map_fd = -1;
+	state->buffer_bytes_dim = 0;
+	state->last_ring_read = -1;
+	state->last_event_size = 0;
 
 	for(int j = 0; j < MODERN_BPF_PROG_ATTACHED_MAX; j++) {
-		g_state.attached_progs_fds[j] = -1;
+		state->attached_progs_fds[j] = -1;
 	}
 
-	g_state.stats = NULL;
-	g_state.nstats = 0;
-	g_state.log_fn = NULL;
-	if(g_state.log_buf) {
-		free(g_state.log_buf);
+	state->stats = NULL;
+	state->nstats = 0;
+	state->log_fn = NULL;
+	if(state->log_buf) {
+		free(state->log_buf);
 	}
-	g_state.log_buf = NULL;
-	g_state.log_buf_size = 0;
+	state->log_buf = NULL;
+	state->log_buf_size = 0;
 
 #ifdef BPF_ITERATOR_SUPPORT
 
 	/* BPF iterators section */
-	g_state.is_tasks_dumping_supported = false;
-	g_state.is_task_files_dumping_supported = false;
+	state->is_tasks_dumping_supported = false;
+	state->is_task_files_dumping_supported = false;
 
 #endif /* BPF_ITERATOR_SUPPORT */
 }
 
-int pman_init_state(falcosecurity_log_fn log_fn,
-                    unsigned long buf_bytes_dim,
-                    uint16_t cpus_for_each_buffer,
-                    bool allocate_online_only) {
-	clear_state();
+int init_tables(struct internal_state *state) {
+	state->exit_event_progs_table = NULL;
+	state->ttm_progs_table = NULL;
+	state->iter_progs_table = NULL;
 
+	state->exit_event_progs_table =
+	        (event_prog_t(*)[PPM_EVENT_MAX][MAX_FEATURE_CHECKS])init_exit_event_progs_table();
+	if(!state->exit_event_progs_table) {
+		return -1;
+	}
+	state->ttm_progs_table = (ttm_progs_t(*)[TTM_MAX])init_ttm_progs_table();
+	if(!state->ttm_progs_table) {
+		free(state->exit_event_progs_table);
+		return -1;
+	}
+	state->iter_progs_table = (iter_prog_t(*)[ITER_PROG_MAX])init_iter_progs_table();
+	if(!state->iter_progs_table) {
+		free(state->ttm_progs_table);
+		free(state->exit_event_progs_table);
+		return -1;
+	}
+	return 0;
+}
+
+struct internal_state *pman_init_state(falcosecurity_log_fn log_fn,
+                                       unsigned long buf_bytes_dim,
+                                       uint16_t cpus_for_each_buffer,
+                                       bool allocate_online_only) {
 	/* `LIBBPF_STRICT_ALL` turns on all supported strict features
 	 * of libbpf to simulate libbpf v1.0 behavior.
 	 * `libbpf_set_strict_mode` returns always 0.
 	 */
 	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 
+	struct internal_state *state = calloc(1, sizeof(struct internal_state));
+	if(!state) {
+		log_errorf("unable to allocate memory for state");
+		return NULL;
+	}
+	if(!init_tables(state)) {
+		log_errorf("unable to initialize state tables");
+		free(state);
+		return NULL;
+	}
+
 	/* Set libbpf logging. */
-	g_state.log_fn = log_fn;
+	state->log_fn = log_fn;
 	// we allocate a big buffer for verifier logs we will free it after initialization.
-	g_state.log_buf = calloc(1, BPF_LOG_BIG_BUF_SIZE);
-	if(g_state.log_buf == NULL)
-		return -ENOMEM;
-	g_state.log_buf_size = BPF_LOG_BIG_BUF_SIZE;
+	state->log_buf = calloc(1, BPF_LOG_BIG_BUF_SIZE);
+	if(state->log_buf == NULL) {
+		log_errorf("unable to allocate memory for libbpf logs' buffer");
+		return NULL;
+	}
+	state->log_buf_size = BPF_LOG_BIG_BUF_SIZE;
 	libbpf_set_print(libbpf_print);
 
 	/* Bump rlimit in any case. We need to do that because some kernels backport
@@ -132,70 +167,76 @@ int pman_init_state(falcosecurity_log_fn log_fn,
 	rl.rlim_cur = rl.rlim_max;
 	if(setrlimit(RLIMIT_MEMLOCK, &rl)) {
 		log_errorf("unable to bump RLIMIT_MEMLOCK to RLIM_INFINITY");
-		return -1;
+		free(state->log_buf);
+		free(state);
+		return NULL;
 	}
 
 	/* Set the available number of CPUs inside the internal state. */
-	g_state.n_possible_cpus = libbpf_num_possible_cpus();
-	if(g_state.n_possible_cpus <= 0) {
+	state->n_possible_cpus = libbpf_num_possible_cpus();
+	if(state->n_possible_cpus <= 0) {
 		log_errorf("no available cpus");
-		return -1;
+		free(state->log_buf);
+		free(state);
+		return NULL;
 	}
 
-	g_state.allocate_online_only = allocate_online_only;
+	state->allocate_online_only = allocate_online_only;
 
-	if(g_state.allocate_online_only) {
-		ssize_t online_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+	if(state->allocate_online_only) {
+		const ssize_t online_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 		if(online_cpus != -1) {
 			/* We will allocate buffers only for online CPUs */
-			g_state.n_interesting_cpus = online_cpus;
+			state->n_interesting_cpus = online_cpus;
 		} else {
 			/* Fallback to all available CPU even if the `allocate_online_only` flag is set to
 			 * `true` */
-			g_state.n_interesting_cpus = g_state.n_possible_cpus;
+			state->n_interesting_cpus = state->n_possible_cpus;
 		}
 	} else {
 		/* We will allocate buffers only for all available CPUs */
-		g_state.n_interesting_cpus = g_state.n_possible_cpus;
+		state->n_interesting_cpus = state->n_possible_cpus;
 	}
 
 	/* We are requiring a buffer every `cpus_for_each_buffer` CPUs,
 	 * but `cpus_for_each_buffer` is greater than our possible CPU number!
 	 */
-	if(cpus_for_each_buffer > g_state.n_interesting_cpus) {
+	if(cpus_for_each_buffer > state->n_interesting_cpus) {
 		log_errorf(
 		        "buffer every '%d' CPUs, but '%d' is greater than our interesting CPU number (%d)!",
 		        cpus_for_each_buffer,
 		        cpus_for_each_buffer,
-		        g_state.n_interesting_cpus);
-		return -1;
+		        state->n_interesting_cpus);
+		free(state->log_buf);
+		free(state);
+		return NULL;
 	}
 
 	/* `0` is a special value that means a single ring buffer shared between all the CPUs */
 	if(cpus_for_each_buffer == 0) {
 		/* We want a single ring buffer so 1 ring buffer for all the interesting CPUs we have */
-		g_state.cpus_for_each_buffer = g_state.n_interesting_cpus;
+		state->cpus_for_each_buffer = state->n_interesting_cpus;
 	} else {
-		g_state.cpus_for_each_buffer = cpus_for_each_buffer;
+		state->cpus_for_each_buffer = cpus_for_each_buffer;
 	}
 
 	/* Set the number of ring buffers we need */
-	g_state.n_required_buffers = g_state.n_interesting_cpus / g_state.cpus_for_each_buffer;
+	state->n_required_buffers = state->n_interesting_cpus / state->cpus_for_each_buffer;
 	/* If we have some remaining CPUs it means that we need another buffer */
-	if((g_state.n_interesting_cpus % g_state.cpus_for_each_buffer) != 0) {
-		g_state.n_required_buffers++;
+	if(state->n_interesting_cpus % state->cpus_for_each_buffer != 0) {
+		state->n_required_buffers++;
 	}
 	/* Set the dimension of a single ring buffer */
-	g_state.buffer_bytes_dim = buf_bytes_dim;
+	state->buffer_bytes_dim = buf_bytes_dim;
 
 	/* These will be used during the ring buffer consumption phase. */
-	g_state.last_ring_read = -1;
-	g_state.last_event_size = 0;
-	return 0;
+	state->last_ring_read = -1;
+	state->last_event_size = 0;
+	return state;
 }
 
-int pman_get_required_buffers() {
-	return g_state.n_required_buffers;
+int pman_get_required_buffers(const struct internal_state *state) {
+	return state->n_required_buffers;
 }
 
 bool check_location(const char *path) {

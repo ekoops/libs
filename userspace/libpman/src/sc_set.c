@@ -23,7 +23,7 @@ limitations under the License.
 
 /* If the provided error is ENOENT, logs a message and returns 0. Otherwise, simply returns the
  * provided error. */
-static int ignore_and_log_enoent(const char* sc_name, const int err) {
+static int ignore_and_log_enoent(const char *sc_name, const int err) {
 	if(err != ENOENT) {
 		return err;
 	}
@@ -36,11 +36,11 @@ static int ignore_and_log_enoent(const char* sc_name, const int err) {
 }
 
 /* This function should be idempotent, every time it is called it should enforce again the state */
-int pman_enforce_sc_set(bool* sc_set) {
+int pman_enforce_sc_set(const struct internal_state *state, bool *sc_set) {
 	/* If we fail at initialization time the BPF skeleton
 	 * is not initialized when we stop the capture for example
 	 */
-	if(!g_state.skel) {
+	if(!state->skel) {
 		return SCAP_FAILURE;
 	}
 
@@ -73,10 +73,10 @@ int pman_enforce_sc_set(bool* sc_set) {
 		}
 
 		if(!sc_set[sc]) {
-			ret = ret ?: pman_mark_single_64bit_syscall(syscall_id, false);
+			ret = ret ?: pman_mark_single_64bit_syscall(state, syscall_id, false);
 		} else {
 			sys_exit = true;
-			ret = ret ?: pman_mark_single_64bit_syscall(syscall_id, true);
+			ret = ret ?: pman_mark_single_64bit_syscall(state, syscall_id, true);
 		}
 	}
 
@@ -123,71 +123,75 @@ int pman_enforce_sc_set(bool* sc_set) {
 	 * something, as we don't have any other way to deal with it.
 	 */
 	if(attach_connect_ttm_progs)
-		ret = ret ?: ignore_and_log_enoent("connect", attach_connect_toctou_mitigation_progs());
+		ret = ret
+		              ?: ignore_and_log_enoent("connect",
+		                                       attach_connect_toctou_mitigation_progs(state));
 	else
-		ret = ret ?: detach_connect_toctou_mitigation_progs();
+		ret = ret ?: detach_connect_toctou_mitigation_progs(state);
 
 	if(attach_creat_ttm_progs)
-		ret = ret ?: ignore_and_log_enoent("creat", attach_creat_toctou_mitigation_progs());
+		ret = ret ?: ignore_and_log_enoent("creat", attach_creat_toctou_mitigation_progs(state));
 	else
-		ret = ret ?: detach_creat_toctou_mitigation_progs();
+		ret = ret ?: detach_creat_toctou_mitigation_progs(state);
 
 	if(attach_open_ttm_progs)
-		ret = ret ?: ignore_and_log_enoent("open", attach_open_toctou_mitigation_progs());
+		ret = ret ?: ignore_and_log_enoent("open", attach_open_toctou_mitigation_progs(state));
 	else
-		ret = ret ?: detach_open_toctou_mitigation_progs();
+		ret = ret ?: detach_open_toctou_mitigation_progs(state);
 
 	if(attach_openat2_ttm_progs)
-		ret = ret ?: ignore_and_log_enoent("openat2", attach_openat2_toctou_mitigation_progs());
+		ret = ret
+		              ?: ignore_and_log_enoent("openat2",
+		                                       attach_openat2_toctou_mitigation_progs(state));
 	else
-		ret = ret ?: detach_openat2_toctou_mitigation_progs();
+		ret = ret ?: detach_openat2_toctou_mitigation_progs(state);
 
 	if(attach_openat_ttm_progs)
-		ret = ret ?: ignore_and_log_enoent("openat", attach_openat_toctou_mitigation_progs());
+		ret = ret ?: ignore_and_log_enoent("openat", attach_openat_toctou_mitigation_progs(state));
 	else
-		ret = ret ?: detach_openat_toctou_mitigation_progs();
+		ret = ret ?: detach_openat_toctou_mitigation_progs(state);
 
 	/* sys_exit dispatcher section. */
 	if(sys_exit)
-		ret = ret ?: attach_syscall_exit_dispatcher();
+		ret = ret ?: attach_syscall_exit_dispatcher(state);
 	else
-		ret = ret ?: detach_syscall_exit_dispatcher();
+		ret = ret ?: detach_syscall_exit_dispatcher(state);
 
 	/* Special tracepoints section. */
 	if(sched_prog_fork)
-		ret = ret ?: attach_sched_proc_fork();
+		ret = ret ?: attach_sched_proc_fork(state);
 	else
-		ret = ret ?: detach_sched_proc_fork();
+		ret = ret ?: detach_sched_proc_fork(state);
 
 	if(sched_prog_exec)
-		ret = ret ?: attach_sched_proc_exec();
+		ret = ret ?: attach_sched_proc_exec(state);
 	else
-		ret = ret ?: detach_sched_proc_exec();
+		ret = ret ?: detach_sched_proc_exec(state);
 
 	if(sc_set[PPM_SC_SCHED_PROCESS_EXIT])
-		ret = ret ?: attach_sched_proc_exit();
+		ret = ret ?: attach_sched_proc_exit(state);
 	else
-		ret = ret ?: detach_sched_proc_exit();
+		ret = ret ?: detach_sched_proc_exit(state);
 
 	if(sc_set[PPM_SC_SCHED_SWITCH])
-		ret = ret ?: attach_sched_switch();
+		ret = ret ?: attach_sched_switch(state);
 	else
-		ret = ret ?: detach_sched_switch();
+		ret = ret ?: detach_sched_switch(state);
 
 	if(sc_set[PPM_SC_PAGE_FAULT_USER])
-		ret = ret ?: attach_page_fault_user();
+		ret = ret ?: attach_page_fault_user(state);
 	else
-		ret = ret ?: detach_page_fault_user();
+		ret = ret ?: detach_page_fault_user(state);
 
 	if(sc_set[PPM_SC_PAGE_FAULT_KERNEL])
-		ret = ret ?: attach_page_fault_kernel();
+		ret = ret ?: attach_page_fault_kernel(state);
 	else
-		ret = ret ?: detach_page_fault_kernel();
+		ret = ret ?: detach_page_fault_kernel(state);
 
 	if(sc_set[PPM_SC_SIGNAL_DELIVER])
-		ret = ret ?: attach_signal_deliver();
+		ret = ret ?: attach_signal_deliver(state);
 	else
-		ret = ret ?: detach_signal_deliver();
+		ret = ret ?: detach_signal_deliver(state);
 
 	return ret;
 }

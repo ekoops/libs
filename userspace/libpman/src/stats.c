@@ -123,7 +123,7 @@ const char *const modern_bpf_libbpf_stats_names[] = {
                                          ///< run_time_ns / run_cnt.
 };
 
-int pman_get_scap_stats(struct scap_stats *stats) {
+int pman_get_scap_stats(const struct internal_state *state, struct scap_stats *stats) {
 	struct counter_map cnt_map;
 
 	if(!stats) {
@@ -131,7 +131,7 @@ int pman_get_scap_stats(struct scap_stats *stats) {
 		return EINVAL;
 	}
 
-	const int counter_maps_fd = bpf_map__fd(g_state.skel->maps.counter_maps);
+	const int counter_maps_fd = bpf_map__fd(state->skel->maps.counter_maps);
 	if(counter_maps_fd < 0) {
 		const int last_errno = errno;
 		log_errorf("unable to get counter maps");
@@ -147,7 +147,7 @@ int pman_get_scap_stats(struct scap_stats *stats) {
 	/* We always take statistics from all the CPUs, even if some of them are not online.
 	 * If the CPU is not online the counter map will be empty.
 	 */
-	for(int index = 0; index < g_state.n_possible_cpus; index++) {
+	for(int index = 0; index < state->n_possible_cpus; index++) {
 		if(bpf_map_lookup_elem(counter_maps_fd, &index, &cnt_map) < 0) {
 			const int last_errno = errno;
 			log_errorf("unable to get the counter map for CPU %d", index);
@@ -173,17 +173,17 @@ int pman_get_scap_stats(struct scap_stats *stats) {
 }
 
 // Initializes global v2 metrics. Returns 0 on success, -1 otherwise.
-static int init_metrics_v2(const uint32_t flags) {
-	if(g_state.stats) {
+static int init_metrics_v2(struct internal_state *state, const uint32_t flags) {
+	if(state->stats) {
 		log_errorf("bug: 'metrics_v2' array is already allocated");
 		return -1;
 	}
 
-	g_state.nstats = 0;
+	state->nstats = 0;
 
 	int nprogs_attached = 0;
 	for(int j = 0; j < MODERN_BPF_PROG_ATTACHED_MAX; j++) {
-		if(g_state.attached_progs_fds[j] != -1) {
+		if(state->attached_progs_fds[j] != -1) {
 			nprogs_attached++;
 		}
 	}
@@ -193,7 +193,7 @@ static int init_metrics_v2(const uint32_t flags) {
 		// At the moment for each available CPU we want:
 		// - the number of events.
 		// - the number of drops.
-		per_cpu_stats = g_state.n_possible_cpus * 2;
+		per_cpu_stats = state->n_possible_cpus * 2;
 	}
 
 	// Account for statistics related to BPF iterator programs.
@@ -212,25 +212,30 @@ static int init_metrics_v2(const uint32_t flags) {
 		return -1;
 	}
 
-	g_state.nstats = n_stats;
-	g_state.stats = stats;
+	state->nstats = n_stats;
+	state->stats = stats;
 	return 0;
 }
 
-static void set_u64_monotonic_kernel_counter(uint32_t pos, uint64_t val, uint32_t metric_flag) {
-	g_state.stats[pos].type = METRIC_VALUE_TYPE_U64;
-	g_state.stats[pos].flags = metric_flag;
-	g_state.stats[pos].unit = METRIC_VALUE_UNIT_COUNT;
-	g_state.stats[pos].metric_type = METRIC_VALUE_METRIC_TYPE_MONOTONIC;
-	g_state.stats[pos].value.u64 = val;
+static void set_u64_monotonic_kernel_counter(const struct internal_state *state,
+                                             const uint32_t pos,
+                                             const uint64_t val,
+                                             const uint32_t metric_flag) {
+	state->stats[pos].type = METRIC_VALUE_TYPE_U64;
+	state->stats[pos].flags = metric_flag;
+	state->stats[pos].unit = METRIC_VALUE_UNIT_COUNT;
+	state->stats[pos].metric_type = METRIC_VALUE_METRIC_TYPE_MONOTONIC;
+	state->stats[pos].value.u64 = val;
 }
 
 // Collects stats for `METRICS_V2_KERNEL_COUNTERS` and `METRICS_V2_KERNEL_COUNTERS_PER_CPU` (if
 // provided). Returns the strictly-positive number of collected stats on success, -1 otherwise.
-static int collect_kernel_counter_stats(const int counter_maps_fd, const bool collect_per_cpu) {
+static int collect_kernel_counter_stats(const struct internal_state *state,
+                                        const int counter_maps_fd,
+                                        const bool collect_per_cpu) {
 	for(uint32_t stat = 0; stat < MODERN_BPF_MAX_KERNEL_COUNTERS_STATS; stat++) {
-		set_u64_monotonic_kernel_counter(stat, 0, METRICS_V2_KERNEL_COUNTERS);
-		strlcpy(g_state.stats[stat].name,
+		set_u64_monotonic_kernel_counter(state, stat, 0, METRICS_V2_KERNEL_COUNTERS);
+		strlcpy(state->stats[stat].name,
 		        (char *)modern_bpf_kernel_counters_stats_names[stat],
 		        METRIC_NAME_MAX);
 	}
@@ -240,55 +245,57 @@ static int collect_kernel_counter_stats(const int counter_maps_fd, const bool co
 	 * If the CPU is not online the counter map will be empty.
 	 */
 	struct counter_map cnt_map = {};
-	for(uint32_t index = 0; index < g_state.n_possible_cpus; index++) {
+	for(uint32_t index = 0; index < state->n_possible_cpus; index++) {
 		if(bpf_map_lookup_elem(counter_maps_fd, &index, &cnt_map) < 0) {
 			log_errorf("unable to get the counter map for CPU %d", index);
 			return -1;
 		}
-		g_state.stats[MODERN_BPF_N_EVTS].value.u64 += cnt_map.n_evts;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_TOTAL].value.u64 += cnt_map.n_drops_buffer;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_CLONE_FORK_EXIT].value.u64 +=
+		state->stats[MODERN_BPF_N_EVTS].value.u64 += cnt_map.n_evts;
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_TOTAL].value.u64 += cnt_map.n_drops_buffer;
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_CLONE_FORK_EXIT].value.u64 +=
 		        cnt_map.n_drops_buffer_clone_fork_exit;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_EXECVE_EXIT].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_EXECVE_EXIT].value.u64 +=
 		        cnt_map.n_drops_buffer_execve_exit;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_CONNECT_ENTER].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_CONNECT_ENTER].value.u64 +=
 		        cnt_map.n_drops_buffer_connect_enter;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_CONNECT_EXIT].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_CONNECT_EXIT].value.u64 +=
 		        cnt_map.n_drops_buffer_connect_exit;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_OPEN_ENTER].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_OPEN_ENTER].value.u64 +=
 		        cnt_map.n_drops_buffer_open_enter;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_OPEN_EXIT].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_OPEN_EXIT].value.u64 +=
 		        cnt_map.n_drops_buffer_open_exit;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_DIR_FILE_EXIT].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_DIR_FILE_EXIT].value.u64 +=
 		        cnt_map.n_drops_buffer_dir_file_exit;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_OTHER_INTEREST_EXIT].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_OTHER_INTEREST_EXIT].value.u64 +=
 		        cnt_map.n_drops_buffer_other_interest_exit;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_CLOSE_EXIT].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_CLOSE_EXIT].value.u64 +=
 		        cnt_map.n_drops_buffer_close_exit;
-		g_state.stats[MODERN_BPF_N_DROPS_BUFFER_PROC_EXIT].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_BUFFER_PROC_EXIT].value.u64 +=
 		        cnt_map.n_drops_buffer_proc_exit;
-		g_state.stats[MODERN_BPF_N_DROPS_SCRATCH_MAP].value.u64 += cnt_map.n_drops_max_event_size;
-		g_state.stats[MODERN_BPF_N_DROPS].value.u64 +=
+		state->stats[MODERN_BPF_N_DROPS_SCRATCH_MAP].value.u64 += cnt_map.n_drops_max_event_size;
+		state->stats[MODERN_BPF_N_DROPS].value.u64 +=
 		        (cnt_map.n_drops_buffer + cnt_map.n_drops_max_event_size);
 
 		if(!collect_per_cpu) {
 			continue;
 		}
 		// We set the num events for that CPU.
-		set_u64_monotonic_kernel_counter(collected_stats,
+		set_u64_monotonic_kernel_counter(state,
+		                                 collected_stats,
 		                                 cnt_map.n_evts,
 		                                 METRICS_V2_KERNEL_COUNTERS_PER_CPU);
-		snprintf(g_state.stats[collected_stats].name,
+		snprintf(state->stats[collected_stats].name,
 		         METRIC_NAME_MAX,
 		         N_EVENTS_PER_CPU_PREFIX "%d",
 		         index);
 		collected_stats++;
 
 		// We set the drops for that CPU.
-		set_u64_monotonic_kernel_counter(collected_stats,
+		set_u64_monotonic_kernel_counter(state,
+		                                 collected_stats,
 		                                 cnt_map.n_drops_buffer + cnt_map.n_drops_max_event_size,
 		                                 METRICS_V2_KERNEL_COUNTERS_PER_CPU);
-		snprintf(g_state.stats[collected_stats].name,
+		snprintf(state->stats[collected_stats].name,
 		         METRIC_NAME_MAX,
 		         N_DROPS_PER_CPU_PREFIX "%d",
 		         index);
@@ -301,11 +308,11 @@ static int collect_kernel_counter_stats(const int counter_maps_fd, const bool co
 // Collects stats for `METRICS_V2_LIBBPF_STATS`. `base_offset` is the first free position in the
 // global v2 metrics array to push libbpf stats to. Returns the strictly-positive number of
 // collected stats on success, -1 otherwise.
-static int collect_libbpf_stats(const int base_offset) {
+static int collect_libbpf_stats(const struct internal_state *state, const int base_offset) {
 	int fd = 0;
 	int offset = base_offset;
 	for(int bpf_prog = 0; bpf_prog < MODERN_BPF_PROG_ATTACHED_MAX; bpf_prog++) {
-		fd = g_state.attached_progs_fds[bpf_prog];
+		fd = state->attached_progs_fds[bpf_prog];
 		if(fd < 0) {
 			/* landing here means prog was not attached */
 			continue;
@@ -318,34 +325,34 @@ static int collect_libbpf_stats(const int base_offset) {
 		}
 
 		for(int stat = 0; stat < MODERN_BPF_MAX_LIBBPF_STATS; stat++) {
-			if(offset >= g_state.nstats) {
+			if(offset >= state->nstats) {
 				/* This should never happen, we are doing something wrong */
 				log_errorf("no enough space for all the stats");
 				return -1;
 			}
-			g_state.stats[offset].type = METRIC_VALUE_TYPE_U64;
-			g_state.stats[offset].flags = METRICS_V2_LIBBPF_STATS;
-			strlcpy(g_state.stats[offset].name, info.name, METRIC_NAME_MAX);
-			strlcat(g_state.stats[offset].name,
+			state->stats[offset].type = METRIC_VALUE_TYPE_U64;
+			state->stats[offset].flags = METRICS_V2_LIBBPF_STATS;
+			strlcpy(state->stats[offset].name, info.name, METRIC_NAME_MAX);
+			strlcat(state->stats[offset].name,
 			        modern_bpf_libbpf_stats_names[stat],
-			        sizeof(g_state.stats[offset].name));
+			        sizeof(state->stats[offset].name));
 			switch(stat) {
 			case RUN_CNT:
-				g_state.stats[offset].unit = METRIC_VALUE_UNIT_COUNT;
-				g_state.stats[offset].metric_type = METRIC_VALUE_METRIC_TYPE_MONOTONIC;
-				g_state.stats[offset].value.u64 = info.run_cnt;
+				state->stats[offset].unit = METRIC_VALUE_UNIT_COUNT;
+				state->stats[offset].metric_type = METRIC_VALUE_METRIC_TYPE_MONOTONIC;
+				state->stats[offset].value.u64 = info.run_cnt;
 				break;
 			case RUN_TIME_NS:
-				g_state.stats[offset].unit = METRIC_VALUE_UNIT_TIME_NS_COUNT;
-				g_state.stats[offset].metric_type = METRIC_VALUE_METRIC_TYPE_MONOTONIC;
-				g_state.stats[offset].value.u64 = info.run_time_ns;
+				state->stats[offset].unit = METRIC_VALUE_UNIT_TIME_NS_COUNT;
+				state->stats[offset].metric_type = METRIC_VALUE_METRIC_TYPE_MONOTONIC;
+				state->stats[offset].value.u64 = info.run_time_ns;
 				break;
 			case AVG_TIME_NS:
-				g_state.stats[offset].unit = METRIC_VALUE_UNIT_TIME_NS;
-				g_state.stats[offset].metric_type = METRIC_VALUE_METRIC_TYPE_NON_MONOTONIC_CURRENT;
-				g_state.stats[offset].value.u64 = 0;
+				state->stats[offset].unit = METRIC_VALUE_UNIT_TIME_NS;
+				state->stats[offset].metric_type = METRIC_VALUE_METRIC_TYPE_NON_MONOTONIC_CURRENT;
+				state->stats[offset].value.u64 = 0;
 				if(info.run_cnt > 0) {
-					g_state.stats[offset].value.u64 = info.run_time_ns / info.run_cnt;
+					state->stats[offset].value.u64 = info.run_time_ns / info.run_cnt;
 				}
 				break;
 			default:
@@ -362,19 +369,22 @@ static int collect_libbpf_stats(const int base_offset) {
 
 #ifdef BPF_ITERATOR_SUPPORT
 
-static void set_kernel_iter_counter(const uint32_t base_offset,
+static void set_kernel_iter_counter(const struct internal_state *state,
+                                    const uint32_t base_offset,
                                     const uint32_t stat_index,
                                     const uint64_t val) {
 	const char *stat_name = (char *)modern_bpf_kernel_iter_counters_stats_names[stat_index];
 	const uint32_t stat_pos = base_offset + stat_index;
-	set_u64_monotonic_kernel_counter(stat_pos, val, METRICS_V2_KERNEL_ITER_COUNTERS);
-	strlcpy(g_state.stats[stat_pos].name, stat_name, METRIC_NAME_MAX);
+	set_u64_monotonic_kernel_counter(state, stat_pos, val, METRICS_V2_KERNEL_ITER_COUNTERS);
+	strlcpy(state->stats[stat_pos].name, stat_name, METRIC_NAME_MAX);
 }
 
 // Collects stats for `METRICS_V2_KERNEL_ITER_COUNTERS`. `base_offset` is the first free position in
 // the global v2 metrics array to push kernel iterator stats to. Returns the strictly-positive
 // number of collected stats on success, -1 otherwise.
-static int collect_kernel_iter_counter_stats(const int counters_map_fd, const int base_offset) {
+static int collect_kernel_iter_counter_stats(const struct internal_state *state,
+                                             const int counters_map_fd,
+                                             const int base_offset) {
 	struct iter_counters counters = {};
 	const uint32_t key = 0;  // Just a single entry.
 	if(bpf_map_lookup_elem(counters_map_fd, &key, &counters) < 0) {
@@ -382,63 +392,85 @@ static int collect_kernel_iter_counter_stats(const int counters_map_fd, const in
 		return -1;
 	}
 
-	set_kernel_iter_counter(base_offset, MODERN_BPF_ITER_N_EVTS_TASK, counters.n_evts_task);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state, base_offset, MODERN_BPF_ITER_N_EVTS_TASK, counters.n_evts_task);
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_EVTS_TASK_FILE_PIPE,
 	                        counters.n_evts_task_file_pipe);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_EVTS_TASK_FILE_MEMFD,
 	                        counters.n_evts_task_file_memfd);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_EVTS_TASK_FILE_REGULAR,
 	                        counters.n_evts_task_file_regular);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_EVTS_TASK_FILE_DIRECTORY,
 	                        counters.n_evts_task_file_directory);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_EVTS_TASK_FILE_SOCKET_INET,
 	                        counters.n_evts_task_file_socket_inet);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_EVTS_TASK_FILE_SOCKET_INET6,
 	                        counters.n_evts_task_file_socket_inet6);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_EVTS_TASK_FILE_SOCKET_UNIX,
 	                        counters.n_evts_task_file_socket_unix);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_EVTS_TASK_FILE_SOCKET_NETLINK,
 	                        counters.n_evts_task_file_socket_netlink);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_EVTS_TASK_FILE_ANON_INODE,
 	                        counters.n_evts_task_file_anon_inode);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_MAX_EVENT_SIZE,
 	                        counters.n_drops_max_event_size);
-	set_kernel_iter_counter(base_offset, MODERN_BPF_ITER_N_DROPS_TASK, counters.n_drops_task);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
+	                        MODERN_BPF_ITER_N_DROPS_TASK,
+	                        counters.n_drops_task);
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_TASK_FILE_PIPE,
 	                        counters.n_drops_task_file_pipe);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_TASK_FILE_MEMFD,
 	                        counters.n_drops_task_file_memfd);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_TASK_FILE_REGULAR,
 	                        counters.n_drops_task_file_regular);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_TASK_FILE_DIRECTORY,
 	                        counters.n_drops_task_file_directory);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_TASK_FILE_SOCKET_INET,
 	                        counters.n_drops_task_file_socket_inet);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_TASK_FILE_SOCKET_INET6,
 	                        counters.n_drops_task_file_socket_inet6);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_TASK_FILE_SOCKET_UNIX,
 	                        counters.n_drops_task_file_socket_unix);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_TASK_FILE_SOCKET_NETLINK,
 	                        counters.n_drops_task_file_socket_netlink);
-	set_kernel_iter_counter(base_offset,
+	set_kernel_iter_counter(state,
+	                        base_offset,
 	                        MODERN_BPF_ITER_N_DROPS_TASK_FILE_ANON_INODE,
 	                        counters.n_drops_task_file_anon_inode);
 
@@ -448,12 +480,15 @@ static int collect_kernel_iter_counter_stats(const int counters_map_fd, const in
 
 #endif /* BPF_ITERATOR_SUPPORT */
 
-struct metrics_v2 *pman_get_metrics_v2(uint32_t flags, uint32_t *nstats, int32_t *rc) {
+struct metrics_v2 *pman_get_metrics_v2(struct internal_state *state,
+                                       const uint32_t flags,
+                                       uint32_t *nstats,
+                                       int32_t *rc) {
 	*rc = SCAP_FAILURE;
 	*nstats = 0;
 
 	// If it is the first time we call this function we populate the stats.
-	if(g_state.stats == NULL && init_metrics_v2(flags) < 0) {
+	if(state->stats == NULL && init_metrics_v2(state, flags) < 0) {
 		return NULL;
 	}
 
@@ -462,14 +497,15 @@ struct metrics_v2 *pman_get_metrics_v2(uint32_t flags, uint32_t *nstats, int32_t
 
 	/* KERNEL COUNTER STATS */
 	if(flags & METRICS_V2_KERNEL_COUNTERS) {
-		const int counter_maps_fd = bpf_map__fd(g_state.skel->maps.counter_maps);
+		const int counter_maps_fd = bpf_map__fd(state->skel->maps.counter_maps);
 		if(counter_maps_fd < 0) {
 			log_errorf("unable to get 'counter_maps' fd during kernel stats processing");
 			return NULL;
 		}
 
 		const bool collect_per_cpu = flags & METRICS_V2_KERNEL_COUNTERS_PER_CPU;
-		const int collected_stats = collect_kernel_counter_stats(counter_maps_fd, collect_per_cpu);
+		const int collected_stats =
+		        collect_kernel_counter_stats(state, counter_maps_fd, collect_per_cpu);
 		if(collected_stats < 0) {
 			return NULL;
 		}
@@ -485,7 +521,7 @@ struct metrics_v2 *pman_get_metrics_v2(uint32_t flags, uint32_t *nstats, int32_t
 	 * syscall selection mechanisms `handle->curr_sc_set`.
 	 */
 	if(flags & METRICS_V2_LIBBPF_STATS) {
-		const int collected_stats = collect_libbpf_stats(offset);
+		const int collected_stats = collect_libbpf_stats(state, offset);
 		if(collected_stats < 0) {
 			return NULL;
 		}
@@ -495,13 +531,14 @@ struct metrics_v2 *pman_get_metrics_v2(uint32_t flags, uint32_t *nstats, int32_t
 #ifdef BPF_ITERATOR_SUPPORT
 	/* BPF ITERATOR PROGRAMS STATS */
 	if(flags & METRICS_V2_KERNEL_ITER_COUNTERS) {
-		const int counters_map_fd = bpf_map__fd(g_state.skel->maps.iter_counters_map);
+		const int counters_map_fd = bpf_map__fd(state->skel->maps.iter_counters_map);
 		if(counters_map_fd < 0) {
 			log_errorf("unable to get 'iter_counters_map' fd during kernel stats processing");
 			return NULL;
 		}
 
-		const int collected_stats = collect_kernel_iter_counter_stats(counters_map_fd, offset);
+		const int collected_stats =
+		        collect_kernel_iter_counter_stats(state, counters_map_fd, offset);
 		if(collected_stats < 0) {
 			return NULL;
 		}
@@ -512,11 +549,11 @@ struct metrics_v2 *pman_get_metrics_v2(uint32_t flags, uint32_t *nstats, int32_t
 	/* Update with the real number of stats collected */
 	*nstats = offset;
 	*rc = SCAP_SUCCESS;
-	return g_state.stats;
+	return state->stats;
 }
 
-int pman_get_n_tracepoint_hit(long *n_events_per_cpu) {
-	const int counter_maps_fd = bpf_map__fd(g_state.skel->maps.counter_maps);
+int pman_get_n_tracepoint_hit(const struct internal_state *state, long *n_events_per_cpu) {
+	const int counter_maps_fd = bpf_map__fd(state->skel->maps.counter_maps);
 	if(counter_maps_fd < 0) {
 		const int last_errno = errno;
 		log_errorf("unable to get counter maps");
@@ -527,7 +564,7 @@ int pman_get_n_tracepoint_hit(long *n_events_per_cpu) {
 	 * If the CPU is not online the counter map will be empty.
 	 */
 	struct counter_map cnt_map;
-	for(int index = 0; index < g_state.n_possible_cpus; index++) {
+	for(int index = 0; index < state->n_possible_cpus; index++) {
 		if(bpf_map_lookup_elem(counter_maps_fd, &index, &cnt_map) < 0) {
 			const int last_errno = errno;
 			log_errorf("unbale to get the counter map for CPU %d", index);

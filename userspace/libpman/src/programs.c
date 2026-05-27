@@ -16,7 +16,7 @@ limitations under the License.
 
 */
 
-#include "state.h"
+#include "programs.h"
 #include <driver/feature_gates.h>
 #include <libpman.h>
 
@@ -26,71 +26,71 @@ limitations under the License.
 
 /*=============================== ATTACH PROGRAMS ===============================*/
 
-int attach_syscall_exit_dispatcher() {
+int attach_syscall_exit_dispatcher(const struct internal_state *state) {
 	/* The program is already attached. */
-	if(g_state.skel->links.sys_exit != NULL) {
+	if(state->skel->links.sys_exit != NULL) {
 		return 0;
 	}
 
-	g_state.skel->links.sys_exit = bpf_program__attach(g_state.skel->progs.sys_exit);
-	if(!g_state.skel->links.sys_exit) {
+	state->skel->links.sys_exit = bpf_program__attach(state->skel->progs.sys_exit);
+	if(!state->skel->links.sys_exit) {
 		log_errorf("failed to attach the 'sys_exit' program");
 		return errno;
 	}
 	return 0;
 }
 
-int attach_sched_proc_exit() {
+int attach_sched_proc_exit(const struct internal_state *state) {
 	/* The program is already attached. */
-	if(g_state.skel->links.sched_proc_exit != NULL) {
+	if(state->skel->links.sched_proc_exit != NULL) {
 		return 0;
 	}
 
-	g_state.skel->links.sched_proc_exit = bpf_program__attach(g_state.skel->progs.sched_proc_exit);
-	if(!g_state.skel->links.sched_proc_exit) {
+	state->skel->links.sched_proc_exit = bpf_program__attach(state->skel->progs.sched_proc_exit);
+	if(!state->skel->links.sched_proc_exit) {
 		log_errorf("failed to attach the 'sched_proc_exit' program");
 		return errno;
 	}
 	return 0;
 }
 
-int attach_sched_switch() {
+int attach_sched_switch(const struct internal_state *state) {
 	/* The program is already attached. */
-	if(g_state.skel->links.sched_switch != NULL) {
+	if(state->skel->links.sched_switch != NULL) {
 		return 0;
 	}
 
-	g_state.skel->links.sched_switch = bpf_program__attach(g_state.skel->progs.sched_switch);
-	if(!g_state.skel->links.sched_switch) {
+	state->skel->links.sched_switch = bpf_program__attach(state->skel->progs.sched_switch);
+	if(!state->skel->links.sched_switch) {
 		log_errorf("failed to attach the 'sched_switch' program");
 		return errno;
 	}
 	return 0;
 }
 
-int attach_sched_proc_exec() {
+int attach_sched_proc_exec(const struct internal_state *state) {
 	/* The program is already attached. */
-	if(g_state.skel->links.sched_p_exec != NULL) {
+	if(state->skel->links.sched_p_exec != NULL) {
 		return 0;
 	}
 
-	g_state.skel->links.sched_p_exec = bpf_program__attach(g_state.skel->progs.sched_p_exec);
-	if(!g_state.skel->links.sched_p_exec) {
+	state->skel->links.sched_p_exec = bpf_program__attach(state->skel->progs.sched_p_exec);
+	if(!state->skel->links.sched_p_exec) {
 		log_errorf("failed to attach the 'sched_proc_exec' program");
 		return errno;
 	}
 	return 0;
 }
 
-int attach_sched_proc_fork() {
+int attach_sched_proc_fork(const struct internal_state *state) {
 #ifdef CAPTURE_SCHED_PROC_FORK
 	/* The program is already attached. */
-	if(g_state.skel->links.sched_p_fork != NULL) {
+	if(state->skel->links.sched_p_fork != NULL) {
 		return 0;
 	}
 
-	g_state.skel->links.sched_p_fork = bpf_program__attach(g_state.skel->progs.sched_p_fork);
-	if(!g_state.skel->links.sched_p_fork) {
+	state->skel->links.sched_p_fork = bpf_program__attach(state->skel->progs.sched_p_fork);
+	if(!state->skel->links.sched_p_fork) {
 		log_errorf("failed to attach the 'sched_proc_fork' program");
 		return errno;
 	}
@@ -98,15 +98,15 @@ int attach_sched_proc_fork() {
 	return 0;
 }
 
-int attach_page_fault_user() {
+int attach_page_fault_user(const struct internal_state *state) {
 #ifdef CAPTURE_PAGE_FAULTS
 	/* The program is already attached. */
-	if(g_state.skel->links.pf_user != NULL) {
+	if(state->skel->links.pf_user != NULL) {
 		return 0;
 	}
 
-	g_state.skel->links.pf_user = bpf_program__attach(g_state.skel->progs.pf_user);
-	if(!g_state.skel->links.pf_user) {
+	state->skel->links.pf_user = bpf_program__attach(state->skel->progs.pf_user);
+	if(!state->skel->links.pf_user) {
 		log_errorf("failed to attach the 'pf_user' program");
 		return errno;
 	}
@@ -114,15 +114,15 @@ int attach_page_fault_user() {
 	return 0;
 }
 
-int attach_page_fault_kernel() {
+int attach_page_fault_kernel(const struct internal_state *state) {
 #ifdef CAPTURE_PAGE_FAULTS
 	/* The program is already attached. */
-	if(g_state.skel->links.pf_kernel != NULL) {
+	if(state->skel->links.pf_kernel != NULL) {
 		return 0;
 	}
 
-	g_state.skel->links.pf_kernel = bpf_program__attach(g_state.skel->progs.pf_kernel);
-	if(!g_state.skel->links.pf_kernel) {
+	state->skel->links.pf_kernel = bpf_program__attach(state->skel->progs.pf_kernel);
+	if(!state->skel->links.pf_kernel) {
 		log_errorf("failed to attach the 'pf_kernel' program");
 		return errno;
 	}
@@ -130,21 +130,21 @@ int attach_page_fault_kernel() {
 	return 0;
 }
 
-int attach_signal_deliver() {
+int attach_signal_deliver(const struct internal_state *state) {
 	/* The program is already attached. */
-	if(g_state.skel->links.signal_deliver != NULL) {
+	if(state->skel->links.signal_deliver != NULL) {
 		return 0;
 	}
 
-	g_state.skel->links.signal_deliver = bpf_program__attach(g_state.skel->progs.signal_deliver);
-	if(!g_state.skel->links.signal_deliver) {
+	state->skel->links.signal_deliver = bpf_program__attach(state->skel->progs.signal_deliver);
+	if(!state->skel->links.signal_deliver) {
 		log_errorf("failed to attach the 'signal_deliver' program");
 		return errno;
 	}
 	return 0;
 }
 
-static int attach_64bit_toctou_prog(const struct bpf_program* prog, struct bpf_link** prog_link) {
+static int attach_64bit_toctou_prog(const struct bpf_program *prog, struct bpf_link **prog_link) {
 	if(*prog_link != NULL) {
 		return 0;
 	}
@@ -155,10 +155,10 @@ static int attach_64bit_toctou_prog(const struct bpf_program* prog, struct bpf_l
 	return 0;
 }
 
-static int attach_ia32_toctou_prog(const struct bpf_program* ia32_compat_prog,
-                                   const struct bpf_program* ia32_prog,
-                                   struct bpf_link** ia32_compat_prog_link,
-                                   struct bpf_link** ia32_prog_link) {
+static int attach_ia32_toctou_prog(const struct bpf_program *ia32_compat_prog,
+                                   const struct bpf_program *ia32_prog,
+                                   struct bpf_link **ia32_compat_prog_link,
+                                   struct bpf_link **ia32_prog_link) {
 	if(*ia32_compat_prog_link != NULL || *ia32_prog_link != NULL) {
 		return 0;
 	}
@@ -178,162 +178,160 @@ static int attach_ia32_toctou_prog(const struct bpf_program* ia32_compat_prog,
 	return 0;
 }
 
-int attach_connect_toctou_mitigation_progs() {
+int attach_connect_toctou_mitigation_progs(const struct internal_state *state) {
 	const int res =
-	        attach_64bit_toctou_prog(g_state.skel->progs.connect_e, &g_state.skel->links.connect_e);
+	        attach_64bit_toctou_prog(state->skel->progs.connect_e, &state->skel->links.connect_e);
 	if(res) {
 		return res;
 	}
-	return attach_ia32_toctou_prog(g_state.skel->progs.ia32_compat_connect_e,
-	                               g_state.skel->progs.ia32_connect_e,
-	                               &g_state.skel->links.ia32_compat_connect_e,
-	                               &g_state.skel->links.ia32_connect_e);
+	return attach_ia32_toctou_prog(state->skel->progs.ia32_compat_connect_e,
+	                               state->skel->progs.ia32_connect_e,
+	                               &state->skel->links.ia32_compat_connect_e,
+	                               &state->skel->links.ia32_connect_e);
 }
 
-int attach_creat_toctou_mitigation_progs() {
+int attach_creat_toctou_mitigation_progs(const struct internal_state *state) {
 	const int res =
-	        attach_64bit_toctou_prog(g_state.skel->progs.creat_e, &g_state.skel->links.creat_e);
+	        attach_64bit_toctou_prog(state->skel->progs.creat_e, &state->skel->links.creat_e);
 	if(res) {
 		return res;
 	}
-	return attach_ia32_toctou_prog(g_state.skel->progs.ia32_compat_creat_e,
-	                               g_state.skel->progs.ia32_creat_e,
-	                               &g_state.skel->links.ia32_compat_creat_e,
-	                               &g_state.skel->links.ia32_creat_e);
+	return attach_ia32_toctou_prog(state->skel->progs.ia32_compat_creat_e,
+	                               state->skel->progs.ia32_creat_e,
+	                               &state->skel->links.ia32_compat_creat_e,
+	                               &state->skel->links.ia32_creat_e);
 }
 
-int attach_open_toctou_mitigation_progs() {
-	const int res =
-	        attach_64bit_toctou_prog(g_state.skel->progs.open_e, &g_state.skel->links.open_e);
+int attach_open_toctou_mitigation_progs(const struct internal_state *state) {
+	const int res = attach_64bit_toctou_prog(state->skel->progs.open_e, &state->skel->links.open_e);
 	if(res) {
 		return res;
 	}
-	return attach_ia32_toctou_prog(g_state.skel->progs.ia32_compat_open_e,
-	                               g_state.skel->progs.ia32_open_e,
-	                               &g_state.skel->links.ia32_compat_open_e,
-	                               &g_state.skel->links.ia32_open_e);
+	return attach_ia32_toctou_prog(state->skel->progs.ia32_compat_open_e,
+	                               state->skel->progs.ia32_open_e,
+	                               &state->skel->links.ia32_compat_open_e,
+	                               &state->skel->links.ia32_open_e);
 }
 
-int attach_openat_toctou_mitigation_progs() {
+int attach_openat_toctou_mitigation_progs(const struct internal_state *state) {
 	// Attach ia-32 programs before 64 bit program, otherwise the 64 bit program will generate
 	// events for the ia-32 programs attachment attempts.
-	const int res = attach_ia32_toctou_prog(g_state.skel->progs.ia32_compat_openat_e,
-	                                        g_state.skel->progs.ia32_openat_e,
-	                                        &g_state.skel->links.ia32_compat_openat_e,
-	                                        &g_state.skel->links.ia32_openat_e);
+	const int res = attach_ia32_toctou_prog(state->skel->progs.ia32_compat_openat_e,
+	                                        state->skel->progs.ia32_openat_e,
+	                                        &state->skel->links.ia32_compat_openat_e,
+	                                        &state->skel->links.ia32_openat_e);
 	if(res) {
 		return res;
 	}
-	return attach_64bit_toctou_prog(g_state.skel->progs.openat_e, &g_state.skel->links.openat_e);
+	return attach_64bit_toctou_prog(state->skel->progs.openat_e, &state->skel->links.openat_e);
 }
 
-int attach_openat2_toctou_mitigation_progs() {
+int attach_openat2_toctou_mitigation_progs(const struct internal_state *state) {
 	const int res =
-	        attach_64bit_toctou_prog(g_state.skel->progs.openat2_e, &g_state.skel->links.openat2_e);
+	        attach_64bit_toctou_prog(state->skel->progs.openat2_e, &state->skel->links.openat2_e);
 	if(res) {
 		return res;
 	}
-	return attach_ia32_toctou_prog(g_state.skel->progs.ia32_compat_openat2_e,
-	                               g_state.skel->progs.ia32_openat2_e,
-	                               &g_state.skel->links.ia32_compat_openat2_e,
-	                               &g_state.skel->links.ia32_openat2_e);
+	return attach_ia32_toctou_prog(state->skel->progs.ia32_compat_openat2_e,
+	                               state->skel->progs.ia32_openat2_e,
+	                               &state->skel->links.ia32_compat_openat2_e,
+	                               &state->skel->links.ia32_openat2_e);
 }
 
 /*=============================== ATTACH PROGRAMS ===============================*/
 
 /*=============================== DETACH PROGRAMS ===============================*/
 
-int detach_syscall_exit_dispatcher() {
-	if(g_state.skel->links.sys_exit && bpf_link__destroy(g_state.skel->links.sys_exit)) {
+int detach_syscall_exit_dispatcher(const struct internal_state *state) {
+	if(state->skel->links.sys_exit && bpf_link__destroy(state->skel->links.sys_exit)) {
 		log_errorf("failed to detach the 'sys_exit' program");
 		return errno;
 	}
-	g_state.skel->links.sys_exit = NULL;
+	state->skel->links.sys_exit = NULL;
 	return 0;
 }
 
-int detach_sched_proc_exit() {
-	if(g_state.skel->links.sched_proc_exit &&
-	   bpf_link__destroy(g_state.skel->links.sched_proc_exit)) {
+int detach_sched_proc_exit(const struct internal_state *state) {
+	if(state->skel->links.sched_proc_exit &&
+	   bpf_link__destroy(state->skel->links.sched_proc_exit)) {
 		log_errorf("failed to detach the 'sched_proc_exit' program");
 		return errno;
 	}
-	g_state.skel->links.sched_proc_exit = NULL;
+	state->skel->links.sched_proc_exit = NULL;
 	return 0;
 }
 
-int detach_sched_switch() {
-	if(g_state.skel->links.sched_switch && bpf_link__destroy(g_state.skel->links.sched_switch)) {
+int detach_sched_switch(const struct internal_state *state) {
+	if(state->skel->links.sched_switch && bpf_link__destroy(state->skel->links.sched_switch)) {
 		log_errorf("failed to detach the 'sched_switch' program");
 		return errno;
 	}
-	g_state.skel->links.sched_switch = NULL;
+	state->skel->links.sched_switch = NULL;
 	return 0;
 }
 
-int detach_sched_proc_exec() {
-	if(g_state.skel->links.sched_p_exec && bpf_link__destroy(g_state.skel->links.sched_p_exec)) {
+int detach_sched_proc_exec(const struct internal_state *state) {
+	if(state->skel->links.sched_p_exec && bpf_link__destroy(state->skel->links.sched_p_exec)) {
 		log_errorf("failed to detach the 'sched_proc_exec' program");
 		return errno;
 	}
-	g_state.skel->links.sched_p_exec = NULL;
+	state->skel->links.sched_p_exec = NULL;
 	return 0;
 }
 
-int detach_sched_proc_fork() {
+int detach_sched_proc_fork(const struct internal_state *state) {
 #ifdef CAPTURE_SCHED_PROC_FORK
-	if(g_state.skel->links.sched_p_fork && bpf_link__destroy(g_state.skel->links.sched_p_fork)) {
+	if(state->skel->links.sched_p_fork && bpf_link__destroy(state->skel->links.sched_p_fork)) {
 		log_errorf("failed to detach the 'sched_proc_fork' program");
 		return errno;
 	}
-	g_state.skel->links.sched_p_fork = NULL;
+	state->skel->links.sched_p_fork = NULL;
 #endif
 	return 0;
 }
 
-int detach_page_fault_user() {
+int detach_page_fault_user(const struct internal_state *state) {
 #ifdef CAPTURE_PAGE_FAULTS
-	if(g_state.skel->links.pf_user && bpf_link__destroy(g_state.skel->links.pf_user)) {
+	if(state->skel->links.pf_user && bpf_link__destroy(state->skel->links.pf_user)) {
 		log_errorf("failed to detach the 'pf_user' program");
 		return errno;
 	}
-	g_state.skel->links.pf_user = NULL;
+	state->skel->links.pf_user = NULL;
 #endif
 	return 0;
 }
 
-int detach_page_fault_kernel() {
+int detach_page_fault_kernel(const struct internal_state *state) {
 #ifdef CAPTURE_PAGE_FAULTS
-	if(g_state.skel->links.pf_kernel && bpf_link__destroy(g_state.skel->links.pf_kernel)) {
+	if(state->skel->links.pf_kernel && bpf_link__destroy(state->skel->links.pf_kernel)) {
 		log_errorf("failed to detach the 'pf_kernel' program");
 		return errno;
 	}
-	g_state.skel->links.pf_kernel = NULL;
+	state->skel->links.pf_kernel = NULL;
 #endif
 	return 0;
 }
 
-int detach_signal_deliver() {
-	if(g_state.skel->links.signal_deliver &&
-	   bpf_link__destroy(g_state.skel->links.signal_deliver)) {
+int detach_signal_deliver(const struct internal_state *state) {
+	if(state->skel->links.signal_deliver && bpf_link__destroy(state->skel->links.signal_deliver)) {
 		log_errorf("failed to detach the 'signal_deliver' program");
 		return errno;
 	}
-	g_state.skel->links.signal_deliver = NULL;
+	state->skel->links.signal_deliver = NULL;
 	return 0;
 }
 
-static void print_prog_detachment_failure_error(const struct bpf_program* prog) {
-	const char* prog_name = bpf_program__name(prog);
+static void print_prog_detachment_failure_error(const struct bpf_program *prog) {
+	const char *prog_name = bpf_program__name(prog);
 	log_errorf("failed to detach the '%s' program", prog_name);
 }
 
-static int detach_toctou_progs(const struct bpf_program* prog,
-                               const struct bpf_program* ia32_compat_prog,
-                               const struct bpf_program* ia32_prog,
-                               struct bpf_link** prog_link,
-                               struct bpf_link** ia32_compat_prog_link,
-                               struct bpf_link** ia32_prog_link) {
+static int detach_toctou_progs(const struct bpf_program *prog,
+                               const struct bpf_program *ia32_compat_prog,
+                               const struct bpf_program *ia32_prog,
+                               struct bpf_link **prog_link,
+                               struct bpf_link **ia32_compat_prog_link,
+                               struct bpf_link **ia32_prog_link) {
 	if(*prog_link && bpf_link__destroy(*prog_link)) {
 		print_prog_detachment_failure_error(prog);
 		return errno;
@@ -355,49 +353,49 @@ static int detach_toctou_progs(const struct bpf_program* prog,
 	return 0;
 }
 
-int detach_connect_toctou_mitigation_progs() {
-	return detach_toctou_progs(g_state.skel->progs.connect_e,
-	                           g_state.skel->progs.ia32_compat_connect_e,
-	                           g_state.skel->progs.ia32_connect_e,
-	                           &g_state.skel->links.connect_e,
-	                           &g_state.skel->links.ia32_compat_connect_e,
-	                           &g_state.skel->links.ia32_connect_e);
+int detach_connect_toctou_mitigation_progs(const struct internal_state *state) {
+	return detach_toctou_progs(state->skel->progs.connect_e,
+	                           state->skel->progs.ia32_compat_connect_e,
+	                           state->skel->progs.ia32_connect_e,
+	                           &state->skel->links.connect_e,
+	                           &state->skel->links.ia32_compat_connect_e,
+	                           &state->skel->links.ia32_connect_e);
 }
 
-int detach_creat_toctou_mitigation_progs() {
-	return detach_toctou_progs(g_state.skel->progs.creat_e,
-	                           g_state.skel->progs.ia32_compat_creat_e,
-	                           g_state.skel->progs.ia32_creat_e,
-	                           &g_state.skel->links.creat_e,
-	                           &g_state.skel->links.ia32_compat_creat_e,
-	                           &g_state.skel->links.ia32_creat_e);
+int detach_creat_toctou_mitigation_progs(const struct internal_state *state) {
+	return detach_toctou_progs(state->skel->progs.creat_e,
+	                           state->skel->progs.ia32_compat_creat_e,
+	                           state->skel->progs.ia32_creat_e,
+	                           &state->skel->links.creat_e,
+	                           &state->skel->links.ia32_compat_creat_e,
+	                           &state->skel->links.ia32_creat_e);
 }
 
-int detach_open_toctou_mitigation_progs() {
-	return detach_toctou_progs(g_state.skel->progs.open_e,
-	                           g_state.skel->progs.ia32_compat_open_e,
-	                           g_state.skel->progs.ia32_open_e,
-	                           &g_state.skel->links.open_e,
-	                           &g_state.skel->links.ia32_compat_open_e,
-	                           &g_state.skel->links.ia32_open_e);
+int detach_open_toctou_mitigation_progs(const struct internal_state *state) {
+	return detach_toctou_progs(state->skel->progs.open_e,
+	                           state->skel->progs.ia32_compat_open_e,
+	                           state->skel->progs.ia32_open_e,
+	                           &state->skel->links.open_e,
+	                           &state->skel->links.ia32_compat_open_e,
+	                           &state->skel->links.ia32_open_e);
 }
 
-int detach_openat_toctou_mitigation_progs() {
-	return detach_toctou_progs(g_state.skel->progs.openat_e,
-	                           g_state.skel->progs.ia32_compat_openat_e,
-	                           g_state.skel->progs.ia32_openat_e,
-	                           &g_state.skel->links.openat_e,
-	                           &g_state.skel->links.ia32_compat_openat_e,
-	                           &g_state.skel->links.ia32_openat_e);
+int detach_openat_toctou_mitigation_progs(const struct internal_state *state) {
+	return detach_toctou_progs(state->skel->progs.openat_e,
+	                           state->skel->progs.ia32_compat_openat_e,
+	                           state->skel->progs.ia32_openat_e,
+	                           &state->skel->links.openat_e,
+	                           &state->skel->links.ia32_compat_openat_e,
+	                           &state->skel->links.ia32_openat_e);
 }
 
-int detach_openat2_toctou_mitigation_progs() {
-	return detach_toctou_progs(g_state.skel->progs.openat2_e,
-	                           g_state.skel->progs.ia32_compat_openat2_e,
-	                           g_state.skel->progs.ia32_openat2_e,
-	                           &g_state.skel->links.openat2_e,
-	                           &g_state.skel->links.ia32_compat_openat2_e,
-	                           &g_state.skel->links.ia32_openat2_e);
+int detach_openat2_toctou_mitigation_progs(const struct internal_state *state) {
+	return detach_toctou_progs(state->skel->progs.openat2_e,
+	                           state->skel->progs.ia32_compat_openat2_e,
+	                           state->skel->progs.ia32_openat2_e,
+	                           &state->skel->links.openat2_e,
+	                           &state->skel->links.ia32_compat_openat2_e,
+	                           &state->skel->links.ia32_openat2_e);
 }
 
 /*=============================== DETACH PROGRAMS ===============================*/

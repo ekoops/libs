@@ -17,159 +17,160 @@ limitations under the License.
 */
 
 #pragma once
+#include "state.h"
 
 /**
  * @brief Attaches only the syscall_exit_dispatcher.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_syscall_exit_dispatcher();
+int attach_syscall_exit_dispatcher(const struct internal_state *state);
 
 /**
  * @brief Detach only the syscall_exit_dispatcher.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_syscall_exit_dispatcher();
+int detach_syscall_exit_dispatcher(const struct internal_state *state);
 
 /**
  * @brief Attaches only the sched_process_exit tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_sched_proc_exit();
+int attach_sched_proc_exit(const struct internal_state *state);
 
 /**
  * @brief Detach only the sched_process_exit tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_sched_proc_exit();
+int detach_sched_proc_exit(const struct internal_state *state);
 
 /**
  * @brief Attaches only the sched_switch tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_sched_switch();
+int attach_sched_switch(const struct internal_state *state);
 
 /**
  * @brief Detach only the sched_switch tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_sched_switch();
+int detach_sched_switch(const struct internal_state *state);
 
 /**
  * @brief Attaches only the sched_proc_exec tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_sched_proc_exec();
+int attach_sched_proc_exec(const struct internal_state *state);
 
 /**
  * @brief Detach only the sched_proc_exec tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_sched_proc_exec();
+int detach_sched_proc_exec(const struct internal_state *state);
 
 /**
  * @brief Attaches only the sched_proc_fork tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_sched_proc_fork();
+int attach_sched_proc_fork(const struct internal_state *state);
 
 /**
  * @brief Detach only the sched_proc_fork tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_sched_proc_fork();
+int detach_sched_proc_fork(const struct internal_state *state);
 
 /**
  * @brief Attaches only the page_fault_user tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_page_fault_user();
+int attach_page_fault_user(const struct internal_state *state);
 
 /**
  * @brief Detach only the page_fault_user tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_page_fault_user();
+int detach_page_fault_user(const struct internal_state *state);
 
 /**
  * @brief Attaches only the page_fault_kernel tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_page_fault_kernel();
+int attach_page_fault_kernel(const struct internal_state *state);
 
 /**
  * @brief Detach only the page_fault_kernel tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_page_fault_kernel();
+int detach_page_fault_kernel(const struct internal_state *state);
 
 /**
  * @brief Attaches only the signal_deliver tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_signal_deliver();
+int attach_signal_deliver(const struct internal_state *state);
 
 /**
  * @brief Detach only the signal_deliver tracepoint.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_signal_deliver();
+int detach_signal_deliver(const struct internal_state *state);
 
 /*
  * @brief Attaches only the connect TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_connect_toctou_mitigation_progs();
+int attach_connect_toctou_mitigation_progs(const struct internal_state *state);
 
 /**
  * @brief Detach only the connect TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_connect_toctou_mitigation_progs();
+int detach_connect_toctou_mitigation_progs(const struct internal_state *state);
 
 /**
  * @brief Attaches only the creat TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_creat_toctou_mitigation_progs();
+int attach_creat_toctou_mitigation_progs(const struct internal_state *state);
 
 /**
  * @brief Detach only the creat TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_creat_toctou_mitigation_progs();
+int detach_creat_toctou_mitigation_progs(const struct internal_state *state);
 
 /**
  * @brief Attaches only the open TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_open_toctou_mitigation_progs();
+int attach_open_toctou_mitigation_progs(const struct internal_state *state);
 
 /**
  * @brief Detach only the open TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_open_toctou_mitigation_progs();
+int detach_open_toctou_mitigation_progs(const struct internal_state *state);
 
 /**
  * @brief Attaches only the openat TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_openat_toctou_mitigation_progs();
+int attach_openat_toctou_mitigation_progs(const struct internal_state *state);
 
 /**
  * @brief Detach only the openat TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_openat_toctou_mitigation_progs();
+int detach_openat_toctou_mitigation_progs(const struct internal_state *state);
 
 /**
  * @brief Attaches only the openat2 TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int attach_openat2_toctou_mitigation_progs();
+int attach_openat2_toctou_mitigation_progs(const struct internal_state *state);
 
 /**
  * @brief Detach only the openat2 TOCTOU mitigation programs.
  * @return `0` on success, `errno` in case of error.
  */
-int detach_openat2_toctou_mitigation_progs();
+int detach_openat2_toctou_mitigation_progs(const struct internal_state *state);

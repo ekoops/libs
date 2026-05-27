@@ -55,7 +55,7 @@ static int32_t scap_modern_bpf__next(struct scap_engine_handle engine,
                                      scap_evt** pevent,
                                      uint16_t* buffer_id,
                                      uint32_t* pflags) {
-	pman_consume_first_event((void**)pevent, (int16_t*)buffer_id);
+	pman_consume_first_event(state, (void**)pevent, (int16_t*)buffer_id);
 
 	if((*pevent) == NULL) {
 		/* The first time we sleep 500 us, if we have consecutive timeouts we can reach also 30 ms.
@@ -91,7 +91,7 @@ static int32_t scap_modern_bpf_handle_sc(struct scap_engine_handle engine,
 	handle->curr_sc_set.ppm_sc[sc] = op == SCAP_PPM_SC_MASK_SET;
 	/* We update the system state only if the capture is started */
 	if(handle->capturing) {
-		return pman_enforce_sc_set(handle->curr_sc_set.ppm_sc);
+		return pman_enforce_sc_set(state, handle->curr_sc_set.ppm_sc);
 	}
 	return SCAP_SUCCESS;
 }
@@ -142,17 +142,17 @@ int32_t scap_modern_bpf__start_capture(struct scap_engine_handle engine) {
 	 * in our flow, right now in live mode, it should be called only once...
 	 */
 	for(int i = 0; i < SYSCALL_TABLE_SIZE; i++) {
-		pman_mark_single_64bit_syscall(i, false);
+		pman_mark_single_64bit_syscall(state, i, false);
 	}
 	handle->capturing = true;
-	return pman_enforce_sc_set(handle->curr_sc_set.ppm_sc);
+	return pman_enforce_sc_set(state, handle->curr_sc_set.ppm_sc);
 }
 
 int32_t scap_modern_bpf__stop_capture(struct scap_engine_handle engine) {
 	struct modern_bpf_engine* handle = engine.m_handle;
 	handle->capturing = false;
 	/* NULL is equivalent to an empty array */
-	return pman_enforce_sc_set(NULL);
+	return pman_enforce_sc_set(state, NULL);
 }
 
 static int32_t calibrate_socket_file_ops(struct scap_engine_handle engine) {
@@ -254,13 +254,13 @@ int32_t scap_modern_bpf__init(scap_t* handle, scap_open_args* oargs) {
 	HANDLE(engine)->m_retry_us = BUFFER_EMPTY_WAIT_TIME_US_START;
 
 	/* Load and attach */
-	ret = pman_open_probe();
-	ret = ret ?: pman_prepare_ringbuf_array_before_loading();
-	ret = ret ?: pman_prepare_maps_before_loading();
-	ret = ret ?: pman_prepare_progs_before_loading();
-	ret = ret ?: pman_load_probe();
-	ret = ret ?: pman_finalize_maps_after_loading();
-	ret = ret ?: pman_finalize_ringbuf_array_after_loading();
+	ret = pman_open_probe(state);
+	ret = ret ?: pman_prepare_ringbuf_array_before_loading(state);
+	ret = ret ?: pman_prepare_maps_before_loading(state);
+	ret = ret ?: pman_prepare_progs_before_loading(state);
+	ret = ret ?: pman_load_probe(state);
+	ret = ret ?: pman_finalize_maps_after_loading(state);
+	ret = ret ?: pman_finalize_ringbuf_array_after_loading(state);
 	if(ret != SCAP_SUCCESS) {
 		return ret;
 	}
@@ -282,7 +282,7 @@ int32_t scap_modern_bpf__init(scap_t* handle, scap_open_args* oargs) {
 	       &oargs->ppm_sc_of_interest,
 	       sizeof(interesting_ppm_sc_set));
 
-	HANDLE(engine)->m_api_version = pman_get_probe_api_ver();
+	HANDLE(engine)->m_api_version = pman_get_probe_api_ver(state);
 	HANDLE(engine)->m_schema_version = pman_get_probe_schema_ver();
 
 	HANDLE(engine)->m_flags = 0;
@@ -298,7 +298,7 @@ static uint64_t scap_modern_bpf__get_flags(struct scap_engine_handle engine) {
 }
 
 int32_t scap_modern_bpf__close(struct scap_engine_handle engine) {
-	pman_close_probe();
+	pman_close_probe(&state);
 	return SCAP_SUCCESS;
 }
 
@@ -322,11 +322,11 @@ const struct metrics_v2* scap_modern_bpf__get_stats_v2(struct scap_engine_handle
 		// we can't collect libbpf stats if bpf stats are not enabled
 		flags &= ~METRICS_V2_LIBBPF_STATS;
 	}
-	return pman_get_metrics_v2(flags, nstats, rc);
+	return pman_get_metrics_v2(state, flags, nstats, rc);
 }
 
 int32_t scap_modern_bpf__get_n_tracepoint_hit(struct scap_engine_handle engine, long* ret) {
-	if(pman_get_n_tracepoint_hit(ret)) {
+	if(pman_get_n_tracepoint_hit(state, ret)) {
 		return SCAP_FAILURE;
 	}
 	return SCAP_SUCCESS;

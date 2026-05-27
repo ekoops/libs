@@ -18,10 +18,11 @@ limitations under the License.
 
 #pragma once
 
-#include <libscap/scap_log.h>
+#include "events_prog_table.h"
 
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
+#include <libscap/scap_log.h>
 #include <driver/modern_bpf/shared_definitions/struct_definitions.h>
 #include <driver/feature_gates.h>
 #include <bpf_probe.skel.h>
@@ -69,6 +70,10 @@ struct internal_state {
 	size_t log_buf_size;      /* size of the log buffer */
 	falcosecurity_log_fn log_fn;
 
+	event_prog_t (*exit_event_progs_table)[PPM_EVENT_MAX][MAX_FEATURE_CHECKS];
+	ttm_progs_t (*ttm_progs_table)[TTM_MAX];
+	iter_prog_t (*iter_progs_table)[ITER_PROG_MAX];
+
 #ifdef BPF_ITERATOR_SUPPORT
 
 	/* BPF iterator section */
@@ -79,8 +84,6 @@ struct internal_state {
 
 #endif /* BPF_ITERATOR_SUPPORT */
 };
-
-extern struct internal_state g_state;
 
 extern void log_errorf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 extern void log_msgf(enum falcosecurity_log_severity level, const char* fmt, ...)
